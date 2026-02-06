@@ -1,0 +1,64 @@
+name: Daily Job Digest
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  run-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Restore digest cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            digests/sent_links.json
+            digests/run_state.json
+          key: job-digest-cache-${{ github.run_id }}
+          restore-keys: |
+            job-digest-cache-
+
+      - name: Run daily job search
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+          TO_EMAIL: ${{ secrets.TO_EMAIL }}
+          JOB_DIGEST_EMAIL_ENABLED: "true"
+          JOB_DIGEST_WINDOW_HOURS: "72"
+          JOB_DIGEST_MIN_SCORE: "70"
+          JOB_DIGEST_MAX_EMAIL_ROLES: "12"
+          JOB_DIGEST_TZ: "Europe/London"
+          JOB_DIGEST_PREFERENCES: "London or remote UK · Product/Platform roles · KYC/AML/Onboarding/Sanctions/Screening · Min fit 70%"
+          JOB_DIGEST_BASE_DIR: "."
+          JOB_DIGEST_SEEN_CACHE_DAYS: "14"
+          JOB_DIGEST_RUN_AT: "08:40"
+          JOB_DIGEST_RUN_WINDOW_MINUTES: "20"
+        run: |
+          python daily_job_search.py
+
+      - name: Upload digest artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-digest
+          path: |
+            digests/*.xlsx
+            digests/*.csv
+            digests/*.json
