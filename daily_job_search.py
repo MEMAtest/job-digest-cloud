@@ -54,6 +54,10 @@ PREFERENCES = os.getenv(
     "JOB_DIGEST_PREFERENCES",
     "London or remote UK · Product/Platform roles · KYC/AML/Onboarding/Sanctions/Screening · Min fit 70%",
 )
+SOURCES_SUMMARY = os.getenv(
+    "JOB_DIGEST_SOURCES",
+    "LinkedIn (guest search) · Greenhouse boards (complyadvantage, appian, socure, symphonyai, entrust)",
+)
 SEEN_CACHE_PATH = Path(
     os.getenv("JOB_DIGEST_SEEN_CACHE", str(DIGEST_DIR / "sent_links.json"))
 )
@@ -257,6 +261,12 @@ def filter_new_records(records: List[JobRecord], seen: Dict[str, str]) -> List[J
             continue
         new_records.append(record)
     return new_records
+
+
+def select_top_pick(records: List[JobRecord]) -> Optional[JobRecord]:
+    if not records:
+        return None
+    return max(records, key=lambda record: record.fit_score)
 
 
 def load_run_state(path: Path) -> Dict[str, str]:
@@ -543,9 +553,33 @@ def build_email_html(records: List[JobRecord], window_hours: int) -> str:
             "<div style='font-family:Arial, sans-serif; max-width:900px; margin:0 auto;'>"
             f"<h2 style='color:#0B4F8A;'>{header}</h2>"
             f"<p style='color:#333;'>Preferences: {PREFERENCES}</p>"
+            f"<p style='color:#333;'>Sources checked: {SOURCES_SUMMARY}</p>"
             "<div style='background:#F7F9FC; padding:16px; border-radius:8px;'>"
             "<p style='margin:0;'>No roles matched in this window. I will keep scanning and send the next update tomorrow.</p>"
             "</div>"
+            "</div>"
+        )
+
+    top_pick = select_top_pick(records)
+
+    top_pick_section = ""
+    if top_pick:
+        top_pick_section = (
+            "<div style='border:1px solid #F3C969; border-left:6px solid #F5A623; "
+            "background:#FFF8E6; padding:12px; border-radius:8px; margin-bottom:14px;'>"
+            "<div style='font-weight:bold; color:#8A5A0B; margin-bottom:6px;'>Top Pick</div>"
+            f"<div style='font-size:16px; font-weight:bold; color:#0B4F8A;'>"
+            f"<a href='{top_pick.link}' style='color:#0B4F8A; text-decoration:none;'>"
+            f"{top_pick.role}</a></div>"
+            f"<div style='color:#555; margin-top:4px;'>{top_pick.company} · {top_pick.location}</div>"
+        f"<div style='margin-top:8px; color:#333;'><strong>Released:</strong> {top_pick.posted} "
+        f"· <strong>Source:</strong> {top_pick.source} · <strong>Fit:</strong> {top_pick.fit_score}%</div>"
+            f"<div style='margin-top:8px; color:#333;'><strong>Preference match:</strong> "
+            f"{top_pick.preference_match}</div>"
+            f"<div style='margin-top:8px; color:#333;'><strong>Why you fit:</strong> "
+            f"{top_pick.why_fit}</div>"
+            f"<div style='margin-top:8px; color:#333;'><strong>Potential gaps:</strong> "
+            f"{top_pick.cv_gap}</div>"
             "</div>"
         )
 
@@ -559,11 +593,22 @@ def build_email_html(records: List[JobRecord], window_hours: int) -> str:
             fit_color = "#8A5A0B"
 
         row_bg = "#FFFFFF" if idx % 2 == 0 else "#F9FBFD"
+        if top_pick and rec.link == top_pick.link:
+            row_bg = "#FFF3D6"
+        badge = ""
+        if top_pick and rec.link == top_pick.link:
+            badge = (
+                "<span style='display:inline-block; margin-left:8px; padding:2px 6px; "
+                "border-radius:10px; background:#F5A623; color:#fff; font-size:11px; "
+                "font-weight:bold;'>Top Pick</span>"
+            )
+
         rows.append(
             f"<tr style='background:{row_bg};'>"
-            f"<td style='padding:10px;'><a href='{rec.link}' style='color:#0B4F8A; text-decoration:none;'><strong>{rec.role}</strong></a>"
+            f"<td style='padding:10px;'><a href='{rec.link}' style='color:#0B4F8A; text-decoration:none;'><strong>{rec.role}</strong></a>{badge}"
             f"<div style='color:#666; font-size:12px; margin-top:4px;'>{rec.company} · {rec.location}</div></td>"
             f"<td style='padding:10px; white-space:nowrap;'>{rec.posted}</td>"
+            f"<td style='padding:10px; color:#333;'>{rec.source}</td>"
             f"<td style='padding:10px;'><span style='display:inline-block; padding:4px 8px; border-radius:12px; "
             f"background:{fit_color}; color:#fff; font-weight:bold;'>{rec.fit_score}%</span></td>"
             f"<td style='padding:10px; color:#333;'>{rec.preference_match}</td>"
@@ -578,11 +623,12 @@ def build_email_html(records: List[JobRecord], window_hours: int) -> str:
         "<thead style='background:#F0F4F8;'>"
         "<tr>"
         "<th style='text-align:left; padding:10px;'>Role</th>"
-        "<th style='text-align:left; padding:10px;'>Released</th>"
-        "<th style='text-align:left; padding:10px;'>Fit</th>"
-        "<th style='text-align:left; padding:10px;'>Preference Match</th>"
-        "<th style='text-align:left; padding:10px;'>Why You Fit</th>"
-        "<th style='text-align:left; padding:10px;'>Potential Gaps</th>"
+            "<th style='text-align:left; padding:10px;'>Released</th>"
+            "<th style='text-align:left; padding:10px;'>Source</th>"
+            "<th style='text-align:left; padding:10px;'>Fit</th>"
+            "<th style='text-align:left; padding:10px;'>Preference Match</th>"
+            "<th style='text-align:left; padding:10px;'>Why You Fit</th>"
+            "<th style='text-align:left; padding:10px;'>Potential Gaps</th>"
         "</tr>"
         "</thead><tbody>"
         + "".join(rows)
@@ -593,7 +639,9 @@ def build_email_html(records: List[JobRecord], window_hours: int) -> str:
         "<div style='font-family:Arial, sans-serif; max-width:1000px; margin:0 auto;'>"
         f"<h2 style='color:#0B4F8A; margin-bottom:4px;'>{header}</h2>"
         f"<p style='color:#555; margin-top:0;'>Preferences: {PREFERENCES}</p>"
+        f"<p style='color:#555; margin-top:0;'>Sources checked: {SOURCES_SUMMARY}</p>"
         f"<p style='color:#333; font-weight:bold;'>Matches found: {len(records)}</p>"
+        + top_pick_section
         + table
         + "</div>"
     )
@@ -731,9 +779,13 @@ def main() -> None:
 
     records = list(unique.values())
 
+    # Keep records ordered by fit score (highest first)
+    records = sorted(records, key=lambda record: record.fit_score, reverse=True)
+
     # Remove roles already sent in previous digests
     seen_cache = prune_seen_cache(load_seen_cache(SEEN_CACHE_PATH), SEEN_CACHE_DAYS)
     records = filter_new_records(records, seen_cache)
+    records = sorted(records, key=lambda record: record.fit_score, reverse=True)
 
     # Write outputs
     today = datetime.now().strftime("%Y-%m-%d")
@@ -766,16 +818,35 @@ def main() -> None:
         df.to_csv(out_csv, index=False)
 
     # Build and send email
+    top_pick = select_top_pick(records)
     top_records = records[:MAX_EMAIL_ROLES]
+    if top_pick and top_pick not in top_records:
+        top_records = [top_pick] + top_records
+        top_records = top_records[:MAX_EMAIL_ROLES]
     html_body = build_email_html(top_records, WINDOW_HOURS)
     text_lines = [
         f"Daily job digest (last {WINDOW_HOURS} hours).",
         f"Preferences: {PREFERENCES}",
+        f"Sources checked: {SOURCES_SUMMARY}",
         f"Roles found: {len(records)}",
         "",
     ]
+    if top_pick:
+        text_lines.append("Top pick:")
+        text_lines.append(
+            f"- {top_pick.role} | {top_pick.company} | {top_pick.posted} | "
+            f"Source {top_pick.source} | Fit {top_pick.fit_score}%"
+        )
+        text_lines.append(f"  Preference match: {top_pick.preference_match}")
+        text_lines.append(f"  Why fit: {top_pick.why_fit}")
+        text_lines.append(f"  Potential gaps: {top_pick.cv_gap}")
+        text_lines.append(f"  Link: {top_pick.link}")
+        text_lines.append("")
     for rec in top_records:
-        text_lines.append(f"- {rec.role} | {rec.company} | {rec.posted} | Fit {rec.fit_score}%")
+        text_lines.append(
+            f"- {rec.role} | {rec.company} | {rec.posted} | "
+            f"Source {rec.source} | Fit {rec.fit_score}%"
+        )
         text_lines.append(f"  Preference match: {rec.preference_match}")
         text_lines.append(f"  Why fit: {rec.why_fit}")
         text_lines.append(f"  Potential gaps: {rec.cv_gap}")
