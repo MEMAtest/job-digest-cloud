@@ -326,6 +326,8 @@ def parse_posted_within_window(posted_text: str, posted_date: str, window_hours:
     text = (posted_text or "").lower().strip()
     if "just now" in text or "today" in text:
         return True
+    if "yesterday" in text:
+        return window_hours >= 24
     match = re.search(r"(\d+)", text)
     number = int(match.group(1)) if match else None
 
@@ -334,9 +336,9 @@ def parse_posted_within_window(posted_text: str, posted_date: str, window_hours:
     if "hour" in text and number is not None:
         return number <= window_hours
     if "day" in text and number is not None:
-        return number <= 1 and window_hours >= 24
+        return (number * 24) <= window_hours
     if "week" in text and number is not None:
-        return False
+        return (number * 7 * 24) <= window_hours
 
     if posted_date:
         try:
