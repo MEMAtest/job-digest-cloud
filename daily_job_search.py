@@ -140,6 +140,37 @@ VENDOR_COMPANIES = {
     "entrust",
 }
 
+FINTECH_COMPANIES = {
+    "wise",
+    "airwallex",
+    "revolut",
+    "monzo",
+    "starling",
+    "engine by starling",
+    "visa",
+    "mastercard",
+    "worldpay",
+    "checkout.com",
+    "stripe",
+    "modulr",
+    "gocardless",
+    "klarna",
+    "n26",
+    "tide",
+    "mollie",
+    "jpmorganchase",
+    "goldman sachs",
+    "marcus",
+    "lseg",
+    "broadridge",
+    "davies",
+    "experian",
+    "socure",
+    "kyckr",
+    "quantexa",
+    "complyadvantage",
+}
+
 DOMAIN_TERMS = [
     "kyc",
     "aml",
@@ -364,8 +395,11 @@ def score_fit(text: str, company: str) -> Tuple[int, List[str], List[str]]:
         score += min(20, 4 * len(matched_domain))
     if matched_extra:
         score += min(10, 2 * len(matched_extra))
-    if any(v in company.lower() for v in VENDOR_COMPANIES):
-        score += 5
+    company_l = company.lower()
+    if any(v in company_l for v in VENDOR_COMPANIES):
+        score += 12
+    if any(f in company_l for f in FINTECH_COMPANIES):
+        score += 8
     if "onboarding" in text_l or "kyc" in text_l:
         score += 3
     if "api" in text_l:
