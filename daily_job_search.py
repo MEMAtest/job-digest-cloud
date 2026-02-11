@@ -56,7 +56,7 @@ PREFERENCES = os.getenv(
 )
 SOURCES_SUMMARY = os.getenv(
     "JOB_DIGEST_SOURCES",
-    "LinkedIn (guest search) · Greenhouse boards (complyadvantage, appian, socure, symphonyai, entrust)",
+    "LinkedIn (guest search) · Greenhouse boards · Lever boards",
 )
 SEEN_CACHE_PATH = Path(
     os.getenv("JOB_DIGEST_SEEN_CACHE", str(DIGEST_DIR / "sent_links.json"))
@@ -96,6 +96,14 @@ SEARCH_KEYWORDS = [
     "product owner onboarding",
     "product manager transaction monitoring",
     "product manager client onboarding",
+    "product lead risk",
+    "product lead compliance",
+    "product manager sanctions",
+    "product manager due diligence",
+    "product manager case management",
+    "product manager investigation",
+    "product manager fraud prevention",
+    "product manager identity verification",
 ]
 
 SEARCH_LOCATIONS = [
@@ -231,6 +239,32 @@ GREENHOUSE_BOARDS = [
     "socure",
     "symphonyai",
     "entrust",
+    "quantexa",
+    "kyckr",
+    "kyc360",
+    "ripjar",
+    "fenergo",
+    "veriff",
+    "onfido",
+    "trulioo",
+    "sumsub",
+    "napier",
+]
+
+LEVER_BOARDS = [
+    "onfido",
+    "trulioo",
+    "sumsub",
+    "veriff",
+    "kyckr",
+    "clearscore",
+    "tide",
+    "monzo",
+    "airwallex",
+    "revolut",
+    "checkout",
+    "gocardless",
+    "wise",
 ]
 
 
@@ -582,6 +616,51 @@ def greenhouse_search(session: requests.Session) -> List[Dict[str, str]]:
     return jobs
 
 
+def lever_search(session: requests.Session) -> List[Dict[str, str]]:
+    jobs: List[Dict[str, str]] = []
+    for board in LEVER_BOARDS:
+        url = f"https://api.lever.co/v0/postings/{board}?mode=json"
+        try:
+            resp = session.get(url, timeout=20)
+        except requests.RequestException:
+            continue
+        if resp.status_code != 200:
+            continue
+        try:
+            data = resp.json()
+        except ValueError:
+            continue
+        if not isinstance(data, list):
+            continue
+        for job in data:
+            title = job.get("text", "") or job.get("title", "")
+            if not title:
+                continue
+            company = board.replace("-", " ").title()
+            location = ""
+            if isinstance(job.get("categories"), dict):
+                location = job["categories"].get("location", "") or ""
+            link = job.get("hostedUrl") or job.get("applyUrl") or ""
+            posted_ms = job.get("createdAt")
+            posted_date = ""
+            if posted_ms:
+                try:
+                    posted_date = datetime.fromtimestamp(posted_ms / 1000, tz=timezone.utc).isoformat()
+                except (OSError, ValueError):
+                    posted_date = ""
+            jobs.append(
+                {
+                    "title": title,
+                    "company": company,
+                    "location": location,
+                    "link": link,
+                    "posted_text": "",
+                    "posted_date": posted_date,
+                }
+            )
+    return jobs
+
+
 def build_email_html(records: List[JobRecord], window_hours: int) -> str:
     header = f"Daily Job Digest · Last {window_hours} hours"
     if not records:
@@ -799,6 +878,46 @@ def main() -> None:
                 link=job.get("link", ""),
                 posted=posted_text or posted_date,
                 source="Greenhouse",
+                fit_score=score,
+                preference_match=preference_match,
+                why_fit=why_fit,
+                cv_gap=cv_gap,
+                notes="",
+            )
+        )
+
+    lever_jobs = lever_search(session)
+    for job in lever_jobs:
+        title = job.get("title", "")
+        company = job.get("company", "")
+        location = job.get("location", "")
+        if not is_relevant_title(title):
+            continue
+        if not is_relevant_location(location):
+            continue
+
+        posted_text = job.get("posted_text", "")
+        posted_date = job.get("posted_date", "")
+        if not parse_posted_within_window(posted_text, posted_date, WINDOW_HOURS):
+            continue
+
+        full_text = f"{title} {company}"
+        score, _, _ = score_fit(full_text, company)
+        if score < MIN_SCORE:
+            continue
+
+        why_fit = build_reasons(full_text)
+        cv_gap = build_gaps(full_text)
+        preference_match = build_preference_match(full_text, company, location)
+
+        all_jobs.append(
+            JobRecord(
+                role=title,
+                company=company,
+                location=location,
+                link=job.get("link", ""),
+                posted=posted_text or posted_date,
+                source="Lever",
                 fit_score=score,
                 preference_match=preference_match,
                 why_fit=why_fit,
