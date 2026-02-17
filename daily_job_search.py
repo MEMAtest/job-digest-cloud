@@ -56,7 +56,7 @@ PREFERENCES = os.getenv(
 )
 SOURCES_SUMMARY = os.getenv(
     "JOB_DIGEST_SOURCES",
-    "LinkedIn (guest search) · Greenhouse boards · Lever boards",
+    "LinkedIn (guest search + company search) · Greenhouse boards · Lever boards",
 )
 SEEN_CACHE_PATH = Path(
     os.getenv("JOB_DIGEST_SEEN_CACHE", str(DIGEST_DIR / "sent_links.json"))
@@ -104,6 +104,83 @@ SEARCH_KEYWORDS = [
     "product manager investigation",
     "product manager fraud prevention",
     "product manager identity verification",
+]
+
+COMPANY_SEARCH_TERMS = [
+    "product manager",
+    "product owner",
+    "product lead",
+    "product manager onboarding",
+    "product manager compliance",
+    "product manager risk",
+    "product manager fraud",
+]
+
+SEARCH_COMPANIES = [
+    # Banks & FS
+    "Barclays",
+    "HSBC",
+    "NatWest",
+    "Lloyds",
+    "Santander",
+    "Standard Chartered",
+    "Citi",
+    "JPMorgan",
+    "Goldman Sachs",
+    "Morgan Stanley",
+    "Bank of America",
+    "Deutsche Bank",
+    "UBS",
+    "LSEG",
+    # Fintech / Payments
+    "Wise",
+    "Revolut",
+    "Monzo",
+    "Starling",
+    "Tide",
+    "Zopa",
+    "OakNorth",
+    "Atom Bank",
+    "ClearBank",
+    "Kroo",
+    "Chip",
+    "Curve",
+    "Checkout.com",
+    "Stripe",
+    "Adyen",
+    "Worldpay",
+    "GoCardless",
+    "Modulr",
+    "TrueLayer",
+    "Tink",
+    "Plaid",
+    "Airwallex",
+    "Rapyd",
+    "Marqeta",
+    # RegTech / KYC / Screening
+    "Fenergo",
+    "Quantexa",
+    "ComplyAdvantage",
+    "LexisNexis Risk",
+    "NICE Actimize",
+    "Dow Jones",
+    "Napier",
+    "Trulioo",
+    "Onfido",
+    "Sumsub",
+    "Veriff",
+    "Feedzai",
+    "Socure",
+    "Kyckr",
+    # Big Tech
+    "Google",
+    "Microsoft",
+    "Amazon",
+    "Apple",
+    "Meta",
+    "Salesforce",
+    "Oracle",
+    "SAP",
 ]
 
 SEARCH_LOCATIONS = [
@@ -177,6 +254,34 @@ FINTECH_COMPANIES = {
     "kyckr",
     "quantexa",
     "complyadvantage",
+}
+
+BANK_COMPANIES = {
+    "barclays",
+    "hsbc",
+    "natwest",
+    "lloyds",
+    "santander",
+    "standard chartered",
+    "citi",
+    "jpmorgan",
+    "goldman sachs",
+    "morgan stanley",
+    "bank of america",
+    "deutsche bank",
+    "ubs",
+    "lseg",
+}
+
+TECH_COMPANIES = {
+    "google",
+    "microsoft",
+    "amazon",
+    "apple",
+    "meta",
+    "salesforce",
+    "oracle",
+    "sap",
 }
 
 DOMAIN_TERMS = [
@@ -434,6 +539,10 @@ def score_fit(text: str, company: str) -> Tuple[int, List[str], List[str]]:
         score += 12
     if any(f in company_l for f in FINTECH_COMPANIES):
         score += 8
+    if any(b in company_l for b in BANK_COMPANIES):
+        score += 6
+    if any(t in company_l for t in TECH_COMPANIES):
+        score += 4
     if "onboarding" in text_l or "kyc" in text_l:
         score += 3
     if "api" in text_l:
@@ -478,6 +587,12 @@ def build_preference_match(text: str, company: str, location: str) -> str:
         parts.append("KYC/AML/Onboarding")
     if any(vendor in company_l for vendor in VENDOR_COMPANIES):
         parts.append("RegTech/Vendor")
+    if any(fintech in company_l for fintech in FINTECH_COMPANIES):
+        parts.append("Fintech/Payments")
+    if any(bank in company_l for bank in BANK_COMPANIES):
+        parts.append("Bank/FS")
+    if any(tech in company_l for tech in TECH_COMPANIES):
+        parts.append("Big Tech")
     if "api" in text_l or "platform" in text_l:
         parts.append("Platform/API")
 
@@ -557,6 +672,62 @@ def linkedin_search(session: requests.Session) -> List[Dict[str, str]]:
                     }
 
                 time.sleep(0.3)
+
+    # Company-focused searches (narrower paging to reduce load)
+    for company in SEARCH_COMPANIES:
+        for base_term in COMPANY_SEARCH_TERMS:
+            keywords = f"{base_term} {company}"
+            for location in SEARCH_LOCATIONS:
+                for start in [0]:
+                    params = {
+                        "keywords": keywords,
+                        "location": location,
+                        "f_TPR": "r604800",
+                        "start": start,
+                    }
+                    try:
+                        resp = session.get(base_url, params=params, headers=headers, timeout=20)
+                    except requests.RequestException:
+                        continue
+                    if resp.status_code != 200:
+                        continue
+
+                    soup = BeautifulSoup(resp.text, "html.parser")
+                    for card in soup.select("div.base-search-card"):
+                        job_urn = card.get("data-entity-urn", "")
+                        job_id = job_urn.split(":")[-1]
+                        if not job_id:
+                            continue
+
+                        title_el = card.select_one("h3.base-search-card__title")
+                        company_el = card.select_one("h4.base-search-card__subtitle")
+                        location_el = card.select_one("span.job-search-card__location")
+                        time_el = card.select_one("time")
+                        link_el = card.select_one("a.base-card__full-link")
+
+                        title = normalize_text(title_el.get_text()) if title_el else ""
+                        company_name = normalize_text(company_el.get_text()) if company_el else ""
+                        location_text = normalize_text(location_el.get_text()) if location_el else ""
+                        posted_text = normalize_text(time_el.get_text()) if time_el else ""
+                        posted_date = time_el.get("datetime") if time_el else ""
+                        link = link_el.get("href") if link_el else ""
+
+                        if not title or not company_name:
+                            continue
+                        if company_name.lower() in EXCLUDE_COMPANIES:
+                            continue
+
+                        jobs[job_id] = {
+                            "job_id": job_id,
+                            "title": title,
+                            "company": company_name,
+                            "location": location_text,
+                            "posted_text": posted_text,
+                            "posted_date": posted_date,
+                            "link": clean_link(link),
+                        }
+
+                    time.sleep(0.2)
 
     return list(jobs.values())
 
