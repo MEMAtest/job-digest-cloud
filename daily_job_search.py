@@ -56,7 +56,7 @@ PREFERENCES = os.getenv(
 )
 SOURCES_SUMMARY = os.getenv(
     "JOB_DIGEST_SOURCES",
-    "LinkedIn (guest search + company search) · Greenhouse boards · Lever boards",
+    "LinkedIn (guest search + company search) · Greenhouse boards · Lever boards · SmartRecruiters",
 )
 SEEN_CACHE_PATH = Path(
     os.getenv("JOB_DIGEST_SEEN_CACHE", str(DIGEST_DIR / "sent_links.json"))
@@ -92,10 +92,20 @@ SEARCH_KEYWORDS = [
     "product manager identity",
     "product manager fraud",
     "product manager regtech",
+    "product manager kyb",
+    "product manager cdd",
+    "product manager edd",
     "product owner kyc",
     "product owner onboarding",
+    "product owner compliance",
+    "product owner screening",
     "product manager transaction monitoring",
     "product manager client onboarding",
+    "product manager customer onboarding",
+    "product manager account opening",
+    "product manager client lifecycle",
+    "product manager customer lifecycle",
+    "product manager clm",
     "product lead risk",
     "product lead compliance",
     "product manager sanctions",
@@ -104,6 +114,11 @@ SEARCH_KEYWORDS = [
     "product manager investigation",
     "product manager fraud prevention",
     "product manager identity verification",
+    "product manager onboarding platform",
+    "product manager compliance platform",
+    "product manager risk platform",
+    "product manager screening platform",
+    "product manager financial crime platform",
 ]
 
 COMPANY_SEARCH_TERMS = [
@@ -114,6 +129,9 @@ COMPANY_SEARCH_TERMS = [
     "product manager compliance",
     "product manager risk",
     "product manager fraud",
+    "product management",
+    "product operations",
+    "product specialist",
 ]
 
 SEARCH_COMPANIES = [
@@ -122,7 +140,14 @@ SEARCH_COMPANIES = [
     "HSBC",
     "NatWest",
     "Lloyds",
+    "Lloyds Banking Group",
     "Santander",
+    "Nationwide",
+    "TSB",
+    "Virgin Money",
+    "Metro Bank",
+    "Tesco Bank",
+    "Coutts",
     "Standard Chartered",
     "Citi",
     "JPMorgan",
@@ -131,12 +156,19 @@ SEARCH_COMPANIES = [
     "Bank of America",
     "Deutsche Bank",
     "UBS",
+    "BNP Paribas",
+    "RBC",
+    "ING",
+    "Rabobank",
+    "ABN AMRO",
+    "UniCredit",
     "LSEG",
     # Fintech / Payments
     "Wise",
     "Revolut",
     "Monzo",
     "Starling",
+    "Engine by Starling",
     "Tide",
     "Zopa",
     "OakNorth",
@@ -157,12 +189,27 @@ SEARCH_COMPANIES = [
     "Airwallex",
     "Rapyd",
     "Marqeta",
+    "Mambu",
+    "Thought Machine",
+    "Temenos",
+    "Avaloq",
+    "Funding Circle",
+    "Lendable",
+    "Zilch",
+    "Solaris",
     # RegTech / KYC / Screening
     "Fenergo",
     "Quantexa",
     "ComplyAdvantage",
     "LexisNexis Risk",
     "NICE Actimize",
+    "Actimize",
+    "Pega",
+    "FIS",
+    "Moody's",
+    "S&P Global",
+    "Oracle",
+    "Appian",
     "Dow Jones",
     "Napier",
     "Trulioo",
@@ -172,6 +219,20 @@ SEARCH_COMPANIES = [
     "Feedzai",
     "Socure",
     "Kyckr",
+    "KYC360",
+    "Ripjar",
+    "FinScan",
+    "IMTF",
+    "Saphyre",
+    "SymphonyAI",
+    "Alloy",
+    "Incode",
+    "Norbloc",
+    "smartKYC",
+    "KYC Portal",
+    "Encompass",
+    "Sigma360",
+    "Davies",
     # Big Tech
     "Google",
     "Microsoft",
@@ -186,12 +247,25 @@ SEARCH_COMPANIES = [
 SEARCH_LOCATIONS = [
     "London, United Kingdom",
     "United Kingdom",
+    "Remote",
 ]
 
 EXCLUDE_TITLE_TERMS = {"growth"}
 EXCLUDE_COMPANIES = {"ebury"}
 
-ROLE_TITLE_REQUIREMENTS = {"manager", "owner", "lead", "principal", "head", "director"}
+ROLE_TITLE_REQUIREMENTS = {
+    "manager",
+    "owner",
+    "lead",
+    "principal",
+    "head",
+    "director",
+    "specialist",
+    "strategy",
+    "operations",
+    "management",
+    "vp",
+}
 
 VENDOR_COMPANIES = {
     "fenergo",
@@ -223,6 +297,11 @@ VENDOR_COMPANIES = {
     "experian",
     "kyckr",
     "entrust",
+    "finscan",
+    "imtf",
+    "norbloc",
+    "smartkyc",
+    "kyc portal",
 }
 
 FINTECH_COMPANIES = {
@@ -254,6 +333,21 @@ FINTECH_COMPANIES = {
     "kyckr",
     "quantexa",
     "complyadvantage",
+    "plaid",
+    "truelayer",
+    "tink",
+    "marqeta",
+    "adyen",
+    "rapyd",
+    "curve",
+    "chip",
+    "kroo",
+    "zopa",
+    "oaknorth",
+    "clearpay",
+    "funding circle",
+    "lendable",
+    "zilch",
 }
 
 BANK_COMPANIES = {
@@ -261,6 +355,7 @@ BANK_COMPANIES = {
     "hsbc",
     "natwest",
     "lloyds",
+    "lloyds banking group",
     "santander",
     "standard chartered",
     "citi",
@@ -271,6 +366,18 @@ BANK_COMPANIES = {
     "deutsche bank",
     "ubs",
     "lseg",
+    "nationwide",
+    "tsb",
+    "virgin money",
+    "metro bank",
+    "tesco bank",
+    "coutts",
+    "bnp paribas",
+    "rbc",
+    "ing",
+    "rabobank",
+    "abn amro",
+    "unicredit",
 }
 
 TECH_COMPANIES = {
@@ -282,6 +389,8 @@ TECH_COMPANIES = {
     "salesforce",
     "oracle",
     "sap",
+    "servicenow",
+    "atlassian",
 }
 
 DOMAIN_TERMS = [
@@ -298,6 +407,13 @@ DOMAIN_TERMS = [
     "due diligence",
     "edd",
     "cdd",
+    "kyb",
+    "clm",
+    "client lifecycle",
+    "customer lifecycle",
+    "account opening",
+    "account onboarding",
+    "client onboarding",
     "regulatory",
     "regtech",
     "case management",
@@ -312,6 +428,10 @@ EXTRA_TERMS = [
     "dashboard",
     "workflow",
     "orchestration",
+    "decisioning",
+    "rules",
+    "configuration",
+    "integration",
 ]
 
 GAP_TERMS = {
@@ -336,6 +456,12 @@ REASON_HINTS = {
     "investigation": "Investigation workflow ownership aligns with your financial crime delivery.",
     "data": "Data and analytics product work aligns with your reporting dashboard builds.",
     "api": "Platform/API focus matches your integration and orchestration experience.",
+    "clm": "Client lifecycle management aligns with your onboarding and screening background.",
+    "client lifecycle": "Client lifecycle management aligns with your onboarding and screening background.",
+    "customer lifecycle": "Customer lifecycle management aligns with your onboarding and screening background.",
+    "account opening": "Account opening aligns with onboarding and journey design experience.",
+    "kyb": "KYB exposure aligns with your complex entity onboarding experience.",
+    "screening": "Screening and monitoring align with your financial crime controls work.",
 }
 
 GREENHOUSE_BOARDS = [
@@ -354,6 +480,19 @@ GREENHOUSE_BOARDS = [
     "trulioo",
     "sumsub",
     "napier",
+    "plaid",
+    "marqeta",
+    "checkoutcom",
+    "gocardless",
+    "truelayer",
+    "tink",
+    "mollie",
+    "klarna",
+    "airwallex",
+    "modulr",
+    "mambu",
+    "zopa",
+    "thought-machine",
 ]
 
 LEVER_BOARDS = [
@@ -370,6 +509,17 @@ LEVER_BOARDS = [
     "checkout",
     "gocardless",
     "wise",
+    "truelayer",
+    "modulr",
+    "curve",
+    "chip",
+    "kroo",
+    "zopa",
+    "oaknorth",
+]
+
+SMARTRECRUITERS_COMPANIES = [
+    "Visa",
 ]
 
 
@@ -832,6 +982,71 @@ def lever_search(session: requests.Session) -> List[Dict[str, str]]:
     return jobs
 
 
+def smartrecruiters_search(session: requests.Session) -> List[Dict[str, str]]:
+    jobs: List[Dict[str, str]] = []
+    for company in SMARTRECRUITERS_COMPANIES:
+        offset = 0
+        limit = 100
+        while True:
+            url = f"https://api.smartrecruiters.com/v1/companies/{company}/postings"
+            params = {"limit": limit, "offset": offset, "q": "product"}
+            try:
+                resp = session.get(url, params=params, timeout=20)
+            except requests.RequestException:
+                break
+            if resp.status_code != 200:
+                break
+            try:
+                data = resp.json()
+            except ValueError:
+                break
+            content = data.get("content", [])
+            if not content:
+                break
+
+            for job in content:
+                title = job.get("name", "")
+                if not title:
+                    continue
+                company_name = (job.get("company") or {}).get("name", "") or company.replace("-", " ").title()
+                company_identifier = (job.get("company") or {}).get("identifier", "") or company
+                location_data = job.get("location") or {}
+                location_text = ""
+                if location_data.get("remote"):
+                    location_text = "Remote"
+                else:
+                    parts = [
+                        location_data.get("city"),
+                        location_data.get("region"),
+                        location_data.get("country"),
+                    ]
+                    location_text = ", ".join([p for p in parts if p])
+                posted_date = job.get("releasedDate", "")
+                posting_id = job.get("id", "")
+                link = ""
+                if posting_id:
+                    link = f"https://jobs.smartrecruiters.com/{company_identifier}/{posting_id}"
+                jobs.append(
+                    {
+                        "title": title,
+                        "company": company_name,
+                        "location": location_text,
+                        "link": link,
+                        "posted_text": "",
+                        "posted_date": posted_date,
+                    }
+                )
+
+            total_found = data.get("totalFound")
+            if not isinstance(total_found, int):
+                break
+            offset += limit
+            if offset >= total_found:
+                break
+            time.sleep(0.2)
+    return jobs
+
+
 def build_email_html(records: List[JobRecord], window_hours: int) -> str:
     header = f"Daily Job Digest · Last {window_hours} hours"
     if not records:
@@ -1089,6 +1304,46 @@ def main() -> None:
                 link=job.get("link", ""),
                 posted=posted_text or posted_date,
                 source="Lever",
+                fit_score=score,
+                preference_match=preference_match,
+                why_fit=why_fit,
+                cv_gap=cv_gap,
+                notes="",
+            )
+        )
+
+    smart_jobs = smartrecruiters_search(session)
+    for job in smart_jobs:
+        title = job.get("title", "")
+        company = job.get("company", "")
+        location = job.get("location", "")
+        if not is_relevant_title(title):
+            continue
+        if not is_relevant_location(location):
+            continue
+
+        posted_text = job.get("posted_text", "")
+        posted_date = job.get("posted_date", "")
+        if not parse_posted_within_window(posted_text, posted_date, WINDOW_HOURS):
+            continue
+
+        full_text = f"{title} {company}"
+        score, _, _ = score_fit(full_text, company)
+        if score < MIN_SCORE:
+            continue
+
+        why_fit = build_reasons(full_text)
+        cv_gap = build_gaps(full_text)
+        preference_match = build_preference_match(full_text, company, location)
+
+        all_jobs.append(
+            JobRecord(
+                role=title,
+                company=company,
+                location=location,
+                link=job.get("link", ""),
+                posted=posted_text or posted_date,
+                source="SmartRecruiters",
                 fit_score=score,
                 preference_match=preference_match,
                 why_fit=why_fit,
