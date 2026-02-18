@@ -31,6 +31,8 @@ This repo runs a daily job search and emails a digest at **08:40 Europe/London**
      - `JOB_DIGEST_LEVER_BOARDS` (comma-separated)
      - `JOB_DIGEST_SMARTRECRUITERS` (comma-separated)
      - `JOB_DIGEST_ASHBY_BOARDS` (comma-separated)
+   - Optional Workday feeds:
+     - `JOB_DIGEST_WORKDAY_SITES` (comma-separated Workday job site URLs; format: `Company Name|https://company.wd3.myworkdayjobs.com/Company_Careers`)
    - Optional enrichment/portal:
      - `GEMINI_API_KEY`
      - `JOB_DIGEST_PROFILE`

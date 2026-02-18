@@ -19,7 +19,7 @@ from email.mime.text import MIMEText
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
-from urllib.parse import quote_plus, urljoin
+from urllib.parse import quote_plus, urljoin, urlparse
 
 try:
     from zoneinfo import ZoneInfo
@@ -112,6 +112,11 @@ ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY", "") or os.getenv("JOB_DIGEST_ADZUNA
 JOOBLE_API_KEY = os.getenv("JOOBLE_API_KEY", "") or os.getenv("JOB_DIGEST_JOOBLE_KEY", "")
 REED_API_KEY = os.getenv("REED_API_KEY", "") or os.getenv("JOB_DIGEST_REED_KEY", "")
 CV_LIBRARY_API_KEY = os.getenv("CV_LIBRARY_API_KEY", "") or os.getenv("JOB_DIGEST_CVLIB_KEY", "")
+WORKDAY_SITES = [
+    entry.strip()
+    for entry in os.getenv("JOB_DIGEST_WORKDAY_SITES", "").split(",")
+    if entry.strip()
+]
 
 FIREBASE_SERVICE_ACCOUNT_JSON = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "")
 FIREBASE_SERVICE_ACCOUNT_B64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64", "")
@@ -203,17 +208,36 @@ SEARCH_COMPANIES = [
     "Standard Chartered",
     "Citi",
     "JPMorgan",
+    "JPMorgan Chase",
+    "JPMorgan Chase & Co",
     "Goldman Sachs",
     "Morgan Stanley",
     "Bank of America",
     "Deutsche Bank",
     "UBS",
     "BNP Paribas",
+    "Société Générale",
+    "Societe Generale",
+    "Crédit Agricole",
+    "Credit Agricole",
     "RBC",
     "ING",
     "Rabobank",
     "ABN AMRO",
     "UniCredit",
+    "BNY Mellon",
+    "State Street",
+    "Northern Trust",
+    "BlackRock",
+    "Vanguard",
+    "Fidelity",
+    "Nomura",
+    "Mizuho",
+    "MUFG",
+    "SMBC",
+    "Macquarie",
+    "Jefferies",
+    "Rothschild",
     "LSEG",
     # Fintech / Payments
     "Wise",
@@ -249,6 +273,12 @@ SEARCH_COMPANIES = [
     "Lendable",
     "Zilch",
     "Solaris",
+    "Soldo",
+    "Pleo",
+    "Yapily",
+    "PayPal",
+    "Block",
+    "Square",
     # RegTech / KYC / Screening
     "Fenergo",
     "Quantexa",
@@ -718,6 +748,7 @@ JOB_BOARD_SOURCES = [
     {"name": "BuiltInLondon", "type": "html", "url": "https://builtinlondon.uk"},
     {"name": "eFinancialCareers", "type": "html", "url": "https://www.efinancialcareers.co.uk"},
     {"name": "IndeedUK", "type": "html", "url": "https://uk.indeed.com"},
+    {"name": "Workday", "type": "api", "url": "workday"},
     {"name": "JobServe", "type": "html", "url": "https://jobserve.com/gb/en/Job-Search/"},
 ]
 
@@ -759,6 +790,10 @@ def build_sources_summary() -> str:
     if missing_keys:
         summary = f"{summary} · APIs pending: {', '.join(missing_keys)}"
 
+    if WORKDAY_SITES:
+        summary = f"{summary} · Workday feeds ({len(WORKDAY_SITES)})"
+    else:
+        summary = f"{summary} · Workday feeds (0 configured)"
     return summary
 
 
@@ -1314,6 +1349,12 @@ def run_smoke_test() -> None:
                     status = 0
                 else:
                     jobs = cvlibrary_search(session)
+                    count = len(jobs)
+            elif source["name"] == "Workday":
+                if not WORKDAY_SITES:
+                    status = 0
+                else:
+                    jobs = workday_search(session)
                     count = len(jobs)
         elif source["type"] == "html":
             if source["name"] == "JobServe":
@@ -2155,6 +2196,84 @@ def parse_job_detail_jsonld(html: str, fallback_title: str = "") -> Dict[str, st
     return {}
 
 
+def parse_workday_entry(entry: str) -> Tuple[str, str, str, str]:
+    entry = entry.strip()
+    name = ""
+    url = entry
+    if "|" in entry:
+        name, url = [part.strip() for part in entry.split("|", 1)]
+    parsed = urlparse(url if "://" in url else f"https://{url}")
+    host = parsed.netloc
+    path = parsed.path.strip("/")
+    segments = [seg for seg in path.split("/") if seg]
+    filtered = [seg for seg in segments if not re.match(r"^[a-z]{2}-[A-Z]{2}$", seg)]
+    site = filtered[-1] if filtered else (segments[-1] if segments else "")
+    tenant = host.split(".")[0] if host else ""
+    scheme = parsed.scheme or "https"
+    if not name:
+        name = tenant.replace("-", " ").title() if tenant else "Workday"
+    return scheme, host, tenant, site, name
+
+
+def workday_search(session: requests.Session) -> List[Dict[str, str]]:
+    jobs: List[Dict[str, str]] = []
+    if not WORKDAY_SITES:
+        return jobs
+    for entry in WORKDAY_SITES:
+        scheme, host, tenant, site, company_name = parse_workday_entry(entry)
+        if not host or not tenant or not site:
+            continue
+        api_url = f"{scheme}://{host}/wday/cxs/{tenant}/{site}/jobs"
+        for keyword in BOARD_KEYWORDS[:2]:
+            payload = {
+                "limit": 50,
+                "offset": 0,
+                "searchText": f"{keyword} London",
+            }
+            try:
+                resp = session.post(api_url, json=payload, timeout=30)
+            except requests.RequestException:
+                continue
+            if resp.status_code != 200:
+                continue
+            try:
+                data = resp.json()
+            except ValueError:
+                continue
+            postings = data.get("jobPostings") or data.get("jobs") or []
+            for posting in postings:
+                if not isinstance(posting, dict):
+                    continue
+                title = posting.get("title") or posting.get("jobTitle") or ""
+                if not title:
+                    continue
+                link = posting.get("externalPath") or posting.get("applyUrl") or ""
+                if link and link.startswith("/"):
+                    link = f"{scheme}://{host}{link}"
+                link = clean_link(link)
+                location = posting.get("locationsText") or posting.get("location") or "United Kingdom"
+                posted_date = posting.get("postedOn") or ""
+                summary = posting.get("description") or ""
+                if not summary and isinstance(posting.get("bulletFields"), list):
+                    for field in posting.get("bulletFields"):
+                        if isinstance(field, dict) and field.get("name") == "jobDescription":
+                            summary = field.get("value") or ""
+                jobs.append(
+                    {
+                        "title": normalize_text(title),
+                        "company": company_name,
+                        "location": normalize_text(location),
+                        "link": link,
+                        "posted_text": "",
+                        "posted_date": posted_date,
+                        "summary": normalize_text(summary)[:600],
+                        "source": "Workday",
+                    }
+                )
+            time.sleep(0.2)
+    return jobs
+
+
 def html_board_search(
     session: requests.Session,
     source_name: str,
@@ -2816,6 +2935,8 @@ def job_board_search(session: requests.Session) -> List[Dict[str, str]]:
                 jobs.extend(reed_search(session))
             elif source["name"] == "CVLibrary":
                 jobs.extend(cvlibrary_search(session))
+            elif source["name"] == "Workday":
+                jobs.extend(workday_search(session))
         elif source["type"] == "html":
             if source["name"] == "JobServe":
                 jobs.extend(jobserve_search(session))
