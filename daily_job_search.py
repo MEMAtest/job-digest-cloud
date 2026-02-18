@@ -1161,6 +1161,10 @@ def run_smoke_test() -> None:
             elif source["name"] == "Jobicy":
                 jobs = jobicy_search(session)
                 count = len(jobs)
+        elif source["type"] == "html":
+            if source["name"] == "JobServe":
+                jobs = jobserve_search(session)
+                count = len(jobs)
         board_results[source["name"]] = {"count": count, "status": 1 if count >= 0 else 0}
 
     results.update(board_results)
@@ -1667,38 +1671,127 @@ def jobserve_search(session: requests.Session) -> List[Dict[str, str]]:
         return jobs
 
     soup = BeautifulSoup(resp.text, "html.parser")
-    for item in soup.select("div.sjJobItem"):
-        title_el = item.select_one("a.sjJobLink")
-        if not title_el:
-            continue
-        title = normalize_text(title_el.get_text(" "))
-        link = urljoin(url, title_el.get("href", ""))
-        location_el = item.select_one("p.sjJobLocationSalary")
-        location = normalize_text(location_el.get_text(" ")) if location_el else ""
-        desc_el = item.select_one("p.sjJobDesc")
-        summary = normalize_text(desc_el.get_text(" ")) if desc_el else ""
-        posted_el = item.select_one("p.sjJobPosted")
-        posted_date = ""
-        if posted_el:
-            raw = normalize_text(posted_el.get_text(" "))
-            try:
-                dt = datetime.strptime(raw, "%m/%d/%Y %I:%M:%S %p")
-                posted_date = dt.replace(tzinfo=timezone.utc).isoformat()
-            except ValueError:
-                posted_date = raw
+    form = soup.select_one("form")
+    if not form:
+        return jobs
 
-        jobs.append(
-            {
+    base_payload = {}
+    for inp in soup.select("form input"):
+        name = inp.get("name")
+        if not name:
+            continue
+        base_payload[name] = inp.get("value", "")
+
+    action = form.get("action", "")
+    post_url = urljoin(url, action)
+
+    job_map: Dict[str, Dict[str, str]] = {}
+    for keyword in BOARD_KEYWORDS[:3]:
+        payload = dict(base_payload)
+        payload["ctl00$main$srch$ctl_qs$txtKey"] = keyword
+        payload["ctl00$main$srch$ctl_qs$txtTitle"] = ""
+        payload["ctl00$main$srch$ctl_qs$txtLoc"] = "London"
+
+        try:
+            resp2 = session.post(post_url, data=payload, timeout=30)
+        except requests.RequestException:
+            continue
+        if resp2.status_code != 200:
+            continue
+
+        soup2 = BeautifulSoup(resp2.text, "html.parser")
+        shid_el = soup2.select_one("#shid")
+        job_ids_el = soup2.select_one("#jobIDs")
+        if not shid_el or not job_ids_el:
+            continue
+        shid = shid_el.get("value", "")
+        job_ids_str = job_ids_el.get("value", "")
+        if not shid or not job_ids_str:
+            continue
+        first_segment = job_ids_str.split("%")[0]
+        if not first_segment:
+            continue
+
+        api_url = f"https://jobserve.com/WebServices/JobSearch.asmx/RetrieveJobs?shid={shid}"
+        try:
+            resp3 = session.post(api_url, json={"jobIDsStr": first_segment, "pageNum": "1"}, timeout=30)
+        except requests.RequestException:
+            continue
+        if resp3.status_code != 200:
+            continue
+        try:
+            data = resp3.json()
+        except ValueError:
+            continue
+        html = data.get("d", "")
+        if not html:
+            continue
+
+        soup3 = BeautifulSoup(html, "html.parser")
+        for item in soup3.select("div.jobItem"):
+            job_id = (item.get("id") or "").strip()
+            if not job_id:
+                continue
+            title_el = item.select_one("h3.jobResultsTitle")
+            title = normalize_text(title_el.get_text(" ")) if title_el else ""
+            if not title:
+                continue
+            location_el = item.select_one("p.jobResultsLoc")
+            location = normalize_text(location_el.get_text(" ")) if location_el else ""
+            posted_el = item.select_one("p.when")
+            posted_text = normalize_text(posted_el.get_text(" ")) if posted_el else ""
+            job_type_el = item.select_one("p.jobResultsType")
+            job_type = normalize_text(job_type_el.get_text(" ")) if job_type_el else ""
+            salary_el = item.select_one("p.jobResultsSalary")
+            salary = normalize_text(salary_el.get_text(" ")) if salary_el else ""
+
+            summary_parts = [part for part in [job_type, salary] if part]
+            summary = " · ".join(summary_parts)
+
+            job_map[job_id] = {
                 "title": title,
                 "company": "JobServe",
                 "location": location or "United Kingdom",
-                "link": clean_link(link),
-                "posted_text": "",
-                "posted_date": posted_date,
+                "link": f"https://jobserve.com/gb/en/JobSearch.aspx?jobid={job_id}",
+                "posted_text": posted_text,
+                "posted_date": "",
                 "summary": summary,
                 "source": "JobServe",
             }
-        )
+
+        time.sleep(0.2)
+
+    # Enrich a few jobs with detail text
+    detail_ids = list(job_map.keys())[:6]
+    for job_id in detail_ids:
+        api_url = "https://jobserve.com/WebServices/JobSearch.asmx/RetrieveSingleJobDetail"
+        try:
+            resp = session.post(api_url, json={"id": job_id}, timeout=20)
+        except requests.RequestException:
+            continue
+        if resp.status_code != 200:
+            continue
+        try:
+            data = resp.json()
+        except ValueError:
+            continue
+        detail_html = (data.get("d") or {}).get("JobDetailHtml", "")
+        if not detail_html:
+            continue
+        detail_text = normalize_text(BeautifulSoup(detail_html, "html.parser").get_text(" "))
+        if detail_text:
+            job_map[job_id]["summary"] = detail_text[:800]
+            if "Posted by:" in detail_text:
+                try:
+                    company = detail_text.split("Posted by:")[1].split("Posted:", 1)[0].strip()
+                    if company:
+                        job_map[job_id]["company"] = company
+                except Exception:
+                    pass
+
+        time.sleep(0.2)
+
+    jobs.extend(job_map.values())
     return jobs
 
 
