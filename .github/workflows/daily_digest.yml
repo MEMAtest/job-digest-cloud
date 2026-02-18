@@ -40,12 +40,16 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
           TO_EMAIL: ${{ secrets.TO_EMAIL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          JOB_DIGEST_PROFILE: ${{ secrets.JOB_DIGEST_PROFILE }}
           JOB_DIGEST_EMAIL_ENABLED: "true"
           JOB_DIGEST_WINDOW_HOURS: "168"
           JOB_DIGEST_MIN_SCORE: "65"
           JOB_DIGEST_MAX_EMAIL_ROLES: "12"
           JOB_DIGEST_TZ: "Europe/London"
           JOB_DIGEST_PREFERENCES: "London or remote UK · Product/Platform roles · KYC/AML/Onboarding/Sanctions/Screening · Min fit 65%"
+          JOB_DIGEST_GEMINI_MAX_JOBS: "20"
           JOB_DIGEST_BASE_DIR: "."
           JOB_DIGEST_SEEN_CACHE_DAYS: "14"
           JOB_DIGEST_RUN_AT: "08:40"

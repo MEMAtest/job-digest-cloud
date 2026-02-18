@@ -5,11 +5,13 @@ Sources: LinkedIn guest endpoints, Greenhouse boards (optional).
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import os
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -25,6 +27,24 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
+try:
+    import feedparser
+except Exception:  # noqa: BLE001
+    feedparser = None
+
+try:
+    import google.generativeai as genai
+except Exception:  # noqa: BLE001
+    genai = None
+
+try:
+    import firebase_admin
+    from firebase_admin import credentials, firestore
+except Exception:  # noqa: BLE001
+    firebase_admin = None
+    credentials = None
+    firestore = None
+
 
 @dataclass
 class JobRecord:
@@ -39,6 +59,8 @@ class JobRecord:
     why_fit: str
     cv_gap: str
     notes: str
+    prep_questions: List[str] = field(default_factory=list)
+    apply_tips: str = ""
 
 
 DEFAULT_BASE_DIR = Path("/Users/adeomosanya/Documents/job apps/roles")
@@ -54,10 +76,7 @@ PREFERENCES = os.getenv(
     "JOB_DIGEST_PREFERENCES",
     "London or remote UK · Product/Platform roles · KYC/AML/Onboarding/Sanctions/Screening · Min fit 70%",
 )
-SOURCES_SUMMARY = os.getenv(
-    "JOB_DIGEST_SOURCES",
-    "LinkedIn (guest search + company search) · Greenhouse boards · Lever boards · SmartRecruiters",
-)
+SOURCES_SUMMARY_OVERRIDE = os.getenv("JOB_DIGEST_SOURCES", "")
 SEEN_CACHE_PATH = Path(
     os.getenv("JOB_DIGEST_SEEN_CACHE", str(DIGEST_DIR / "sent_links.json"))
 )
@@ -75,6 +94,19 @@ SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
 FROM_EMAIL = os.getenv("FROM_EMAIL", "")
 TO_EMAIL = os.getenv("TO_EMAIL", "ademolaomosanya@gmail.com")
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "") or os.getenv("JOB_DIGEST_GEMINI_KEY", "")
+GEMINI_MODEL = os.getenv("JOB_DIGEST_GEMINI_MODEL", "gemini-1.5-flash")
+GEMINI_MAX_JOBS = int(os.getenv("JOB_DIGEST_GEMINI_MAX_JOBS", "20"))
+JOB_DIGEST_PROFILE = os.getenv(
+    "JOB_DIGEST_PROFILE",
+    "Global product/process owner with KYC, onboarding, screening, financial crime, and"
+    " compliance transformation experience across banks and RegTech platforms.",
+)
+
+FIREBASE_SERVICE_ACCOUNT_JSON = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "")
+FIREBASE_SERVICE_ACCOUNT_B64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64", "")
+FIREBASE_COLLECTION = os.getenv("FIREBASE_COLLECTION", "jobs")
 
 USER_AGENT = os.getenv(
     "JOB_DIGEST_USER_AGENT",
@@ -119,6 +151,17 @@ SEARCH_KEYWORDS = [
     "product manager risk platform",
     "product manager screening platform",
     "product manager financial crime platform",
+]
+
+BOARD_KEYWORDS = [
+    "product manager onboarding",
+    "product manager kyc",
+    "product manager aml",
+    "product manager compliance",
+    "product manager screening",
+    "product owner onboarding",
+    "product manager fraud",
+    "product manager financial crime",
 ]
 
 COMPANY_SEARCH_TERMS = [
@@ -493,6 +536,24 @@ GREENHOUSE_BOARDS = [
     "mambu",
     "zopa",
     "thought-machine",
+    "wise",
+    "revolut",
+    "monzo",
+    "starlingbank",
+    "clearbank",
+    "oaknorth",
+    "tide",
+    "chip",
+    "kroo",
+    "curve",
+    "fundingcircle",
+    "lendable",
+    "lexisnexis",
+    "dowjones",
+    "saphyre",
+    "alloy",
+    "finch",
+    "snyk",
 ]
 
 LEVER_BOARDS = [
@@ -516,11 +577,84 @@ LEVER_BOARDS = [
     "kroo",
     "zopa",
     "oaknorth",
+    "plaid",
+    "marqeta",
+    "fundingcircle",
+    "lendable",
+    "smartpension",
+    "snyk",
+    "checkoutcom",
+    "worldremit",
+    "azimo",
+    "mambu",
+    "thoughtmachine",
 ]
 
 SMARTRECRUITERS_COMPANIES = [
     "Visa",
+    "Mastercard",
+    "StandardChartered",
+    "BNPParibas",
+    "Citi",
+    "UBS",
+    "DeutscheBank",
+    "LSEG",
+    "SAP",
+    "Oracle",
+    "FIS",
+    "Moody",
+    "S&PGlobal",
+    "NICE",
+    "DowJones",
 ]
+
+ASHBY_BOARDS = [
+    "ramp",
+    "brex",
+    "mercury",
+    "airwallex",
+    "gocardless",
+    "stripe",
+    "checkout",
+    "klarna",
+    "wise",
+    "revolut",
+]
+
+JOB_BOARD_SOURCES = [
+    {"name": "WeWorkRemotely", "type": "rss", "url": "https://weworkremotely.com/categories/remote-product-jobs.rss"},
+    {"name": "Remotive", "type": "api", "url": "https://remotive.com/api/remote-jobs"},
+    {"name": "RemoteOK", "type": "api", "url": "https://remoteok.com/api"},
+    {"name": "WorkAnywhere", "type": "rss", "url": "https://workanywhere.io/jobs.rss"},
+    {"name": "RemoteYeah", "type": "rss", "url": "https://remoteyeah.com/jobs.rss"},
+    {"name": "Jobicy", "type": "api", "url": "https://jobicy.com/api/v2/remote-jobs"},
+]
+
+JOB_BOARD_URLS = {source["name"]: source["url"] for source in JOB_BOARD_SOURCES}
+
+
+def build_sources_summary() -> str:
+    if SOURCES_SUMMARY_OVERRIDE:
+        return SOURCES_SUMMARY_OVERRIDE
+
+    board_names = [source["name"] for source in JOB_BOARD_SOURCES]
+    boards_summary = f"Job boards ({len(board_names)}): " + ", ".join(board_names)
+
+    ats_summary = (
+        "ATS boards: "
+        f"Greenhouse ({len(GREENHOUSE_BOARDS)}), "
+        f"Lever ({len(LEVER_BOARDS)}), "
+        f"SmartRecruiters ({len(SMARTRECRUITERS_COMPANIES)}), "
+        f"Ashby ({len(ASHBY_BOARDS)})"
+    )
+
+    return " · ".join(
+        [
+            "LinkedIn (guest search + company search)",
+            boards_summary,
+            ats_summary,
+        ]
+    )
 
 
 def now_utc() -> datetime:
@@ -765,6 +899,130 @@ def is_relevant_location(location: str) -> bool:
     return any(term in loc_l for term in ["london", "united kingdom", "remote", "hybrid"])
 
 
+def parse_gemini_payload(text: str) -> Optional[Dict[str, object]]:
+    if not text:
+        return None
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        return None
+    try:
+        return json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+
+
+def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
+    if not GEMINI_API_KEY or genai is None:
+        return records
+
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel(GEMINI_MODEL)
+    except Exception:
+        return records
+
+    limit = min(GEMINI_MAX_JOBS, len(records))
+    for record in records[:limit]:
+        prompt = (
+            "You are a senior UK fintech product recruiter. Given the candidate profile and job summary, "
+            "score fit 0-100 and produce concise notes. Return JSON ONLY with keys: "
+            "fit_score (int), why_fit (string), cv_gap (string), prep_questions (array of 3-5 strings), "
+            "apply_tips (string).\n\n"
+            f"Candidate profile: {JOB_DIGEST_PROFILE}\n"
+            f"Preferences: {PREFERENCES}\n\n"
+            "Job:\n"
+            f"Title: {record.role}\n"
+            f"Company: {record.company}\n"
+            f"Location: {record.location}\n"
+            f"Posted: {record.posted}\n"
+            f"Notes: {record.notes}\n"
+        )
+        try:
+            response = model.generate_content(prompt)
+        except Exception:
+            continue
+
+        data = parse_gemini_payload(getattr(response, "text", "") or "")
+        if not data:
+            continue
+
+        try:
+            fit_score = int(data.get("fit_score", record.fit_score))
+        except (TypeError, ValueError):
+            fit_score = record.fit_score
+        record.fit_score = max(0, min(100, fit_score))
+        record.why_fit = data.get("why_fit", record.why_fit) or record.why_fit
+        record.cv_gap = data.get("cv_gap", record.cv_gap) or record.cv_gap
+        prep_questions = data.get("prep_questions", record.prep_questions)
+        if isinstance(prep_questions, str):
+            prep_questions = [prep_questions]
+        if isinstance(prep_questions, list):
+            record.prep_questions = [str(q).strip() for q in prep_questions if str(q).strip()]
+        record.apply_tips = data.get("apply_tips", record.apply_tips) or record.apply_tips
+
+        time.sleep(0.25)
+
+    return records
+
+
+def init_firestore_client() -> Optional["firestore.Client"]:
+    if firebase_admin is None or credentials is None or firestore is None:
+        return None
+    if not FIREBASE_SERVICE_ACCOUNT_JSON and not FIREBASE_SERVICE_ACCOUNT_B64:
+        return None
+
+    try:
+        if FIREBASE_SERVICE_ACCOUNT_JSON:
+            service_data = json.loads(FIREBASE_SERVICE_ACCOUNT_JSON)
+        else:
+            decoded = base64.b64decode(FIREBASE_SERVICE_ACCOUNT_B64).decode("utf-8")
+            service_data = json.loads(decoded)
+    except (ValueError, json.JSONDecodeError, OSError):
+        return None
+
+    try:
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(credentials.Certificate(service_data))
+        return firestore.client()
+    except Exception:
+        return None
+
+
+def record_document_id(record: JobRecord) -> str:
+    seed = record.link or f"{record.company}-{record.role}-{record.location}"
+    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+    return digest[:24]
+
+
+def write_records_to_firestore(records: List[JobRecord]) -> None:
+    client = init_firestore_client()
+    if client is None:
+        return
+
+    for record in records:
+        doc_id = record_document_id(record)
+        data = {
+            "role": record.role,
+            "company": record.company,
+            "location": record.location,
+            "link": record.link,
+            "posted": record.posted,
+            "source": record.source,
+            "fit_score": record.fit_score,
+            "preference_match": record.preference_match,
+            "why_fit": record.why_fit,
+            "cv_gap": record.cv_gap,
+            "notes": record.notes,
+            "prep_questions": record.prep_questions,
+            "apply_tips": record.apply_tips,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            client.collection(FIREBASE_COLLECTION).document(doc_id).set(data, merge=True)
+        except Exception:
+            continue
+
+
 def linkedin_search(session: requests.Session) -> List[Dict[str, str]]:
     base_url = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
     headers = {"User-Agent": USER_AGENT}
@@ -982,6 +1240,54 @@ def lever_search(session: requests.Session) -> List[Dict[str, str]]:
     return jobs
 
 
+def ashby_search(session: requests.Session) -> List[Dict[str, str]]:
+    jobs: List[Dict[str, str]] = []
+    for board in ASHBY_BOARDS:
+        url = f"https://api.ashbyhq.com/posting-api/job-board/{board}"
+        try:
+            resp = session.get(url, timeout=20)
+        except requests.RequestException:
+            continue
+        if resp.status_code != 200:
+            continue
+        try:
+            data = resp.json()
+        except ValueError:
+            continue
+        postings = data.get("jobs") or data.get("postings") or []
+        if not isinstance(postings, list):
+            continue
+        for job in postings:
+            title = job.get("title", "")
+            if not title:
+                continue
+            company = job.get("companyName") or board.replace("-", " ").title()
+            location = (
+                job.get("location")
+                or job.get("locationText")
+                or job.get("locationName")
+                or ""
+            )
+            link = (
+                job.get("jobUrl")
+                or job.get("jobPageUrl")
+                or job.get("applyUrl")
+                or ""
+            )
+            posted_date = job.get("publishedAt") or job.get("createdAt") or ""
+            jobs.append(
+                {
+                    "title": title,
+                    "company": company,
+                    "location": location,
+                    "link": link,
+                    "posted_text": "",
+                    "posted_date": posted_date,
+                }
+            )
+    return jobs
+
+
 def smartrecruiters_search(session: requests.Session) -> List[Dict[str, str]]:
     jobs: List[Dict[str, str]] = []
     for company in SMARTRECRUITERS_COMPANIES:
@@ -1047,6 +1353,171 @@ def smartrecruiters_search(session: requests.Session) -> List[Dict[str, str]]:
     return jobs
 
 
+def parse_entry_date(entry: Dict[str, str]) -> str:
+    if hasattr(entry, "published_parsed") and entry.published_parsed:
+        dt = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+        return dt.isoformat()
+    if hasattr(entry, "updated_parsed") and entry.updated_parsed:
+        dt = datetime(*entry.updated_parsed[:6], tzinfo=timezone.utc)
+        return dt.isoformat()
+    return ""
+
+
+def rss_search(url: str, source_name: str) -> List[Dict[str, str]]:
+    if feedparser is None:
+        return []
+    feed = feedparser.parse(url)
+    jobs: List[Dict[str, str]] = []
+    for entry in feed.entries:
+        title = entry.get("title", "")
+        if not title:
+            continue
+        link = entry.get("link", "")
+        summary = normalize_text(entry.get("summary", "")) if entry.get("summary") else ""
+        posted_date = parse_entry_date(entry)
+
+        company = entry.get("author", "")
+        if " at " in title.lower() and not company:
+            parts = title.split(" at ")
+            if len(parts) == 2:
+                title, company = parts[0].strip(), parts[1].strip()
+
+        jobs.append(
+            {
+                "title": title,
+                "company": company or source_name,
+                "location": "Remote",
+                "link": clean_link(link),
+                "posted_text": "",
+                "posted_date": posted_date,
+                "summary": summary,
+                "source": source_name,
+            }
+        )
+    return jobs
+
+
+def remotive_search(session: requests.Session) -> List[Dict[str, str]]:
+    jobs: List[Dict[str, str]] = []
+    url = JOB_BOARD_URLS.get("Remotive")
+    if not url:
+        return jobs
+    try:
+        resp = session.get(url, timeout=25)
+    except requests.RequestException:
+        return jobs
+    if resp.status_code != 200:
+        return jobs
+    try:
+        data = resp.json()
+    except ValueError:
+        return jobs
+    for job in data.get("jobs", []):
+        title = job.get("title", "")
+        if not title:
+            continue
+        jobs.append(
+            {
+                "title": title,
+                "company": job.get("company_name", ""),
+                "location": job.get("candidate_required_location", "Remote"),
+                "link": job.get("url", ""),
+                "posted_text": "",
+                "posted_date": job.get("publication_date", ""),
+                "summary": normalize_text(job.get("description", "")[:500]),
+                "source": "Remotive",
+            }
+        )
+    return jobs
+
+
+def remoteok_search(session: requests.Session) -> List[Dict[str, str]]:
+    jobs: List[Dict[str, str]] = []
+    url = JOB_BOARD_URLS.get("RemoteOK")
+    if not url:
+        return jobs
+    try:
+        resp = session.get(url, timeout=25)
+    except requests.RequestException:
+        return jobs
+    if resp.status_code != 200:
+        return jobs
+    try:
+        data = resp.json()
+    except ValueError:
+        return jobs
+    if not isinstance(data, list):
+        return jobs
+    for job in data:
+        title = job.get("position", "")
+        if not title:
+            continue
+        jobs.append(
+            {
+                "title": title,
+                "company": job.get("company", ""),
+                "location": job.get("location", "Remote"),
+                "link": job.get("url", ""),
+                "posted_text": "",
+                "posted_date": job.get("date", ""),
+                "summary": normalize_text(job.get("description", "")[:500]),
+                "source": "RemoteOK",
+            }
+        )
+    return jobs
+
+
+def jobicy_search(session: requests.Session) -> List[Dict[str, str]]:
+    jobs: List[Dict[str, str]] = []
+    url = JOB_BOARD_URLS.get("Jobicy")
+    if not url:
+        return jobs
+    params = {"tag": "product", "geo": "uk"}
+    try:
+        resp = session.get(url, params=params, timeout=25)
+    except requests.RequestException:
+        return jobs
+    if resp.status_code != 200:
+        return jobs
+    try:
+        data = resp.json()
+    except ValueError:
+        return jobs
+    job_list = data.get("jobs") or data.get("data") or []
+    for job in job_list:
+        title = job.get("jobTitle") or job.get("title") or ""
+        if not title:
+            continue
+        jobs.append(
+            {
+                "title": title,
+                "company": job.get("companyName", "") or job.get("company", ""),
+                "location": job.get("jobGeo", "") or job.get("location", "Remote"),
+                "link": job.get("url", "") or job.get("jobUrl", ""),
+                "posted_text": "",
+                "posted_date": job.get("pubDate", "") or job.get("postedDate", ""),
+                "summary": normalize_text(job.get("description", "")[:500]),
+                "source": "Jobicy",
+            }
+        )
+    return jobs
+
+
+def job_board_search(session: requests.Session) -> List[Dict[str, str]]:
+    jobs: List[Dict[str, str]] = []
+    for source in JOB_BOARD_SOURCES:
+        if source["type"] == "rss":
+            jobs.extend(rss_search(source["url"], source["name"]))
+        elif source["type"] == "api":
+            if source["name"] == "Remotive":
+                jobs.extend(remotive_search(session))
+            elif source["name"] == "RemoteOK":
+                jobs.extend(remoteok_search(session))
+            elif source["name"] == "Jobicy":
+                jobs.extend(jobicy_search(session))
+    return jobs
+
+
 def build_email_html(records: List[JobRecord], window_hours: int) -> str:
     header = f"Daily Job Digest · Last {window_hours} hours"
     if not records:
@@ -1054,7 +1525,7 @@ def build_email_html(records: List[JobRecord], window_hours: int) -> str:
             "<div style='font-family:Arial, sans-serif; max-width:900px; margin:0 auto;'>"
             f"<h2 style='color:#0B4F8A;'>{header}</h2>"
             f"<p style='color:#333;'>Preferences: {PREFERENCES}</p>"
-            f"<p style='color:#333;'>Sources checked: {SOURCES_SUMMARY}</p>"
+            f"<p style='color:#333;'>Sources checked: {build_sources_summary()}</p>"
             "<div style='background:#F7F9FC; padding:16px; border-radius:8px;'>"
             "<p style='margin:0;'>No roles matched in this window. I will keep scanning and send the next update tomorrow.</p>"
             "</div>"
@@ -1140,7 +1611,7 @@ def build_email_html(records: List[JobRecord], window_hours: int) -> str:
         "<div style='font-family:Arial, sans-serif; max-width:1000px; margin:0 auto;'>"
         f"<h2 style='color:#0B4F8A; margin-bottom:4px;'>{header}</h2>"
         f"<p style='color:#555; margin-top:0;'>Preferences: {PREFERENCES}</p>"
-        f"<p style='color:#555; margin-top:0;'>Sources checked: {SOURCES_SUMMARY}</p>"
+        f"<p style='color:#555; margin-top:0;'>Sources checked: {build_sources_summary()}</p>"
         f"<p style='color:#333; font-weight:bold;'>Matches found: {len(records)}</p>"
         + top_pick_section
         + table
@@ -1206,7 +1677,8 @@ def main() -> None:
         if not parse_posted_within_window(posted_text, job.get("posted_date", ""), WINDOW_HOURS):
             continue
 
-        full_text = f"{title} {desc_text}"
+        summary = desc_text[:500]
+        full_text = f"{title} {company} {summary}"
         score, _, _ = score_fit(full_text, company)
 
         if score < MIN_SCORE:
@@ -1228,7 +1700,7 @@ def main() -> None:
                 preference_match=preference_match,
                 why_fit=why_fit,
                 cv_gap=cv_gap,
-                notes="",
+                notes=summary,
             )
         )
 
@@ -1247,7 +1719,8 @@ def main() -> None:
         if not parse_posted_within_window(posted_text, posted_date, WINDOW_HOURS):
             continue
 
-        full_text = f"{title} {company}"
+        summary = job.get("summary", "")
+        full_text = f"{title} {company} {summary}"
         score, _, _ = score_fit(full_text, company)
         if score < MIN_SCORE:
             continue
@@ -1268,7 +1741,7 @@ def main() -> None:
                 preference_match=preference_match,
                 why_fit=why_fit,
                 cv_gap=cv_gap,
-                notes="",
+                notes=summary,
             )
         )
 
@@ -1287,7 +1760,8 @@ def main() -> None:
         if not parse_posted_within_window(posted_text, posted_date, WINDOW_HOURS):
             continue
 
-        full_text = f"{title} {company}"
+        summary = job.get("summary", "")
+        full_text = f"{title} {company} {summary}"
         score, _, _ = score_fit(full_text, company)
         if score < MIN_SCORE:
             continue
@@ -1308,7 +1782,7 @@ def main() -> None:
                 preference_match=preference_match,
                 why_fit=why_fit,
                 cv_gap=cv_gap,
-                notes="",
+                notes=summary,
             )
         )
 
@@ -1327,7 +1801,8 @@ def main() -> None:
         if not parse_posted_within_window(posted_text, posted_date, WINDOW_HOURS):
             continue
 
-        full_text = f"{title} {company}"
+        summary = job.get("summary", "")
+        full_text = f"{title} {company} {summary}"
         score, _, _ = score_fit(full_text, company)
         if score < MIN_SCORE:
             continue
@@ -1348,7 +1823,89 @@ def main() -> None:
                 preference_match=preference_match,
                 why_fit=why_fit,
                 cv_gap=cv_gap,
-                notes="",
+                notes=summary,
+            )
+        )
+
+    ashby_jobs = ashby_search(session)
+    for job in ashby_jobs:
+        title = job.get("title", "")
+        company = job.get("company", "")
+        location = job.get("location", "") or "Remote"
+        if not is_relevant_title(title):
+            continue
+        if not is_relevant_location(location):
+            continue
+
+        posted_text = job.get("posted_text", "")
+        posted_date = job.get("posted_date", "")
+        if not parse_posted_within_window(posted_text, posted_date, WINDOW_HOURS):
+            continue
+
+        summary = job.get("summary", "")
+        full_text = f"{title} {company} {summary}"
+        score, _, _ = score_fit(full_text, company)
+        if score < MIN_SCORE:
+            continue
+
+        why_fit = build_reasons(full_text)
+        cv_gap = build_gaps(full_text)
+        preference_match = build_preference_match(full_text, company, location)
+
+        all_jobs.append(
+            JobRecord(
+                role=title,
+                company=company,
+                location=location,
+                link=job.get("link", ""),
+                posted=posted_text or posted_date,
+                source="Ashby",
+                fit_score=score,
+                preference_match=preference_match,
+                why_fit=why_fit,
+                cv_gap=cv_gap,
+                notes=summary,
+            )
+        )
+
+    board_jobs = job_board_search(session)
+    for job in board_jobs:
+        title = job.get("title", "")
+        company = job.get("company", "")
+        location = job.get("location", "") or "Remote"
+        if not is_relevant_title(title):
+            continue
+        if not is_relevant_location(location):
+            continue
+
+        posted_text = job.get("posted_text", "")
+        posted_date = job.get("posted_date", "")
+        if not parse_posted_within_window(posted_text, posted_date, WINDOW_HOURS):
+            continue
+
+        summary = job.get("summary", "")
+        full_text = f"{title} {company} {summary}"
+        score, _, _ = score_fit(full_text, company)
+        if score < MIN_SCORE:
+            continue
+
+        why_fit = build_reasons(full_text)
+        cv_gap = build_gaps(full_text)
+        preference_match = build_preference_match(full_text, company, location)
+
+        all_jobs.append(
+            JobRecord(
+                role=title,
+                company=company,
+                location=location,
+                link=job.get("link", ""),
+                posted=posted_text or posted_date,
+                source=job.get("source", "Job board"),
+                fit_score=score,
+                preference_match=preference_match,
+                why_fit=why_fit,
+                cv_gap=cv_gap,
+                notes=summary,
             )
         )
 
@@ -1368,6 +1925,13 @@ def main() -> None:
     records = filter_new_records(records, seen_cache)
     records = sorted(records, key=lambda record: record.fit_score, reverse=True)
 
+    # Optional Gemini enhancement (fit %, gaps, prep)
+    records = enhance_records_with_gemini(records)
+    records = sorted(records, key=lambda record: record.fit_score, reverse=True)
+
+    # Optional Firebase persistence
+    write_records_to_firestore(records)
+
     # Write outputs
     today = datetime.now().strftime("%Y-%m-%d")
     out_xlsx = DIGEST_DIR / f"digest_{today}.xlsx"
@@ -1385,6 +1949,8 @@ def main() -> None:
             "Preference_Match": r.preference_match,
             "Why_Fit": r.why_fit,
             "CV_Gap": r.cv_gap,
+            "Prep_Questions": " | ".join(r.prep_questions),
+            "Apply_Tips": r.apply_tips,
             "Notes": r.notes,
         }
         for r in records
@@ -1408,7 +1974,7 @@ def main() -> None:
     text_lines = [
         f"Daily job digest (last {WINDOW_HOURS} hours).",
         f"Preferences: {PREFERENCES}",
-        f"Sources checked: {SOURCES_SUMMARY}",
+        f"Sources checked: {build_sources_summary()}",
         f"Roles found: {len(records)}",
         "",
     ]

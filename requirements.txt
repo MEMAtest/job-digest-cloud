@@ -2,3 +2,6 @@ requests
 beautifulsoup4
 pandas
 openpyxl
+feedparser
+firebase-admin
+google-generativeai
