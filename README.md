@@ -8,6 +8,7 @@ This repo runs a daily job search and emails a digest at **08:40 Europe/London**
 - Includes roles posted in the last **24 hours** by default (configurable).
 - Suppresses repeats using a cache (`sent_links.json`).
 - Sends one email per day at 08:40 (daily schedule).
+- Includes direct UK boards (Totaljobs, CWJobs, Jobsite, eFinancialCareers, IndeedUK) plus RSS sources.
 
 ## Setup (GitHub Actions)
 
@@ -25,6 +26,11 @@ This repo runs a daily job search and emails a digest at **08:40 Europe/London**
      - `JOOBLE_API_KEY`
      - `REED_API_KEY`
      - `CV_LIBRARY_API_KEY`
+   - Optional ATS expansion:
+     - `JOB_DIGEST_GREENHOUSE_BOARDS` (comma-separated)
+     - `JOB_DIGEST_LEVER_BOARDS` (comma-separated)
+     - `JOB_DIGEST_SMARTRECRUITERS` (comma-separated)
+     - `JOB_DIGEST_ASHBY_BOARDS` (comma-separated)
    - Optional enrichment/portal:
      - `GEMINI_API_KEY`
      - `JOB_DIGEST_PROFILE`

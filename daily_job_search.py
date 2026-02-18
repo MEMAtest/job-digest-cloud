@@ -563,6 +563,15 @@ GREENHOUSE_BOARDS = [
     "alloy",
     "finch",
     "snyk",
+    "clearscore",
+    "starlingbank",
+    "tide",
+    "truelayer",
+    "mambu",
+    "thoughtmachine",
+    "rapyd",
+    "plaid",
+    "marqeta",
 ]
 
 LEVER_BOARDS = [
@@ -597,6 +606,16 @@ LEVER_BOARDS = [
     "azimo",
     "mambu",
     "thoughtmachine",
+    "fenergo",
+    "quantexa",
+    "complyadvantage",
+    "ripjar",
+    "napier",
+    "symphonyai",
+    "lexisnexis",
+    "actimize",
+    "saphyre",
+    "encompass",
 ]
 
 SMARTRECRUITERS_COMPANIES = [
@@ -615,6 +634,11 @@ SMARTRECRUITERS_COMPANIES = [
     "S&PGlobal",
     "NICE",
     "DowJones",
+    "Barclays",
+    "HSBC",
+    "Lloyds",
+    "NatWest",
+    "Santander",
 ]
 
 ASHBY_BOARDS = [
@@ -628,7 +652,32 @@ ASHBY_BOARDS = [
     "klarna",
     "wise",
     "revolut",
+    "plaid",
+    "marqeta",
+    "truelayer",
+    "mambu",
+    "thoughtmachine",
 ]
+
+EXTRA_GREENHOUSE = [x.strip() for x in os.getenv("JOB_DIGEST_GREENHOUSE_BOARDS", "").split(",") if x.strip()]
+EXTRA_LEVER = [x.strip() for x in os.getenv("JOB_DIGEST_LEVER_BOARDS", "").split(",") if x.strip()]
+EXTRA_SMARTRECRUITERS = [
+    x.strip() for x in os.getenv("JOB_DIGEST_SMARTRECRUITERS", "").split(",") if x.strip()
+]
+EXTRA_ASHBY = [x.strip() for x in os.getenv("JOB_DIGEST_ASHBY_BOARDS", "").split(",") if x.strip()]
+
+for board in EXTRA_GREENHOUSE:
+    if board not in GREENHOUSE_BOARDS:
+        GREENHOUSE_BOARDS.append(board)
+for board in EXTRA_LEVER:
+    if board not in LEVER_BOARDS:
+        LEVER_BOARDS.append(board)
+for company in EXTRA_SMARTRECRUITERS:
+    if company not in SMARTRECRUITERS_COMPANIES:
+        SMARTRECRUITERS_COMPANIES.append(company)
+for board in EXTRA_ASHBY:
+    if board not in ASHBY_BOARDS:
+        ASHBY_BOARDS.append(board)
 
 JOB_BOARD_SOURCES = [
     {"name": "WeWorkRemotely", "type": "rss", "url": "https://weworkremotely.com/categories/remote-product-jobs.rss"},
@@ -651,6 +700,8 @@ JOB_BOARD_SOURCES = [
     {"name": "Jobsite", "type": "html", "url": "https://www.jobsite.co.uk"},
     {"name": "Technojobs", "type": "html", "url": "https://www.technojobs.co.uk"},
     {"name": "BuiltInLondon", "type": "html", "url": "https://builtinlondon.uk"},
+    {"name": "eFinancialCareers", "type": "html", "url": "https://www.efinancialcareers.co.uk"},
+    {"name": "IndeedUK", "type": "html", "url": "https://uk.indeed.com"},
     {"name": "JobServe", "type": "html", "url": "https://jobserve.com/gb/en/Job-Search/"},
 ]
 
@@ -1250,6 +1301,12 @@ def run_smoke_test() -> None:
                 count = len(jobs)
             elif source["name"] == "BuiltInLondon":
                 jobs = builtin_london_search(session)
+                count = len(jobs)
+            elif source["name"] == "eFinancialCareers":
+                jobs = efinancialcareers_search(session)
+                count = len(jobs)
+            elif source["name"] == "IndeedUK":
+                jobs = indeed_search(session)
                 count = len(jobs)
         board_results[source["name"]] = {"count": count, "status": status}
 
@@ -1990,7 +2047,7 @@ def extract_job_links(html: str, base_url: str) -> List[Tuple[str, str]]:
 
     for anchor in soup.find_all("a", href=True):
         href = anchor.get("href", "")
-        if "/job/" not in href:
+        if not re.search(r"/job/|/jobs/|jobid=", href):
             continue
         if href.startswith("/"):
             href = urljoin(base_url, href)
@@ -2117,6 +2174,117 @@ def html_board_search(
             job_map[link]["posted_date"] = details.get("posted_date") or job_map[link]["posted_date"]
             if details.get("summary"):
                 job_map[link]["summary"] = details["summary"]
+        time.sleep(0.2)
+
+    jobs.extend(job_map.values())
+    return jobs
+
+
+def efinancialcareers_search(session: requests.Session) -> List[Dict[str, str]]:
+    jobs: List[Dict[str, str]] = []
+    base_url = JOB_BOARD_URLS.get("eFinancialCareers")
+    if not base_url:
+        return jobs
+
+    job_map: Dict[str, Dict[str, str]] = {}
+    for keyword in BOARD_KEYWORDS[:3]:
+        slug = slugify(keyword)
+        search_url = f"{base_url}/jobs/{slug}"
+        try:
+            resp = session.get(search_url, timeout=30)
+        except requests.RequestException:
+            continue
+        if resp.status_code != 200:
+            continue
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for anchor in soup.find_all("a", href=True):
+            href = anchor.get("href", "")
+            if "jobs-" not in href or ".id" not in href:
+                continue
+            if href.startswith("/"):
+                href = urljoin(base_url, href)
+            href = clean_link(href)
+            if not href or href in job_map:
+                continue
+            title = normalize_text(anchor.get_text(" "))
+            if len(title) < 4:
+                continue
+            job_map[href] = {
+                "title": title,
+                "company": "eFinancialCareers",
+                "location": "United Kingdom",
+                "link": href,
+                "posted_text": "",
+                "posted_date": "",
+                "summary": "",
+                "source": "eFinancialCareers",
+            }
+        time.sleep(0.2)
+
+    detail_links = list(job_map.keys())[:10]
+    for link in detail_links:
+        try:
+            resp = session.get(link, timeout=30)
+        except requests.RequestException:
+            continue
+        if resp.status_code != 200:
+            continue
+        details = parse_job_detail_jsonld(resp.text, job_map[link]["title"])
+        if details:
+            job_map[link]["title"] = details.get("title") or job_map[link]["title"]
+            job_map[link]["company"] = details.get("company") or job_map[link]["company"]
+            job_map[link]["location"] = details.get("location") or job_map[link]["location"]
+            job_map[link]["posted_date"] = details.get("posted_date") or job_map[link]["posted_date"]
+            if details.get("summary"):
+                job_map[link]["summary"] = details["summary"]
+        time.sleep(0.2)
+
+    jobs.extend(job_map.values())
+    return jobs
+
+
+def indeed_search(session: requests.Session) -> List[Dict[str, str]]:
+    jobs: List[Dict[str, str]] = []
+    base_url = JOB_BOARD_URLS.get("IndeedUK")
+    if not base_url:
+        return jobs
+
+    job_map: Dict[str, Dict[str, str]] = {}
+    for keyword in BOARD_KEYWORDS[:3]:
+        params = {"q": keyword, "l": "London"}
+        try:
+            resp = session.get(f"{base_url}/jobs", params=params, timeout=30)
+        except requests.RequestException:
+            continue
+        if resp.status_code != 200:
+            continue
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for anchor in soup.find_all("a", href=True):
+            href = anchor.get("href", "")
+            if "jk=" not in href:
+                continue
+            if "/rc/clk" not in href and "/viewjob" not in href:
+                continue
+            link = urljoin(base_url, href)
+            link = clean_link(link)
+            if not link or link in job_map:
+                continue
+            title = normalize_text(anchor.get_text(" "))
+            if len(title) < 4:
+                continue
+            job_map[link] = {
+                "title": title,
+                "company": "Indeed",
+                "location": "London",
+                "link": link,
+                "posted_text": "",
+                "posted_date": "",
+                "summary": "",
+                "source": "IndeedUK",
+            }
+
         time.sleep(0.2)
 
     jobs.extend(job_map.values())
@@ -2378,6 +2546,10 @@ def job_board_search(session: requests.Session) -> List[Dict[str, str]]:
                 jobs.extend(html_board_search(session, "Technojobs", source["url"]))
             elif source["name"] == "BuiltInLondon":
                 jobs.extend(builtin_london_search(session))
+            elif source["name"] == "eFinancialCareers":
+                jobs.extend(efinancialcareers_search(session))
+            elif source["name"] == "IndeedUK":
+                jobs.extend(indeed_search(session))
     return jobs
 
 
