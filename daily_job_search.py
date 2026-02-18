@@ -5,6 +5,7 @@ Sources: LinkedIn guest endpoints, Greenhouse boards (optional).
 """
 from __future__ import annotations
 
+import argparse
 import base64
 import hashlib
 import json
@@ -18,6 +19,7 @@ from email.mime.text import MIMEText
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
+from urllib.parse import urljoin
 
 try:
     from zoneinfo import ZoneInfo
@@ -629,6 +631,7 @@ JOB_BOARD_SOURCES = [
     {"name": "WorkAnywhere", "type": "rss", "url": "https://workanywhere.io/jobs.rss"},
     {"name": "RemoteYeah", "type": "rss", "url": "https://remoteyeah.com/jobs.rss"},
     {"name": "Jobicy", "type": "api", "url": "https://jobicy.com/api/v2/remote-jobs"},
+    {"name": "JobServe", "type": "html", "url": "https://jobserve.com/gb/en/Job-Search/"},
 ]
 
 JOB_BOARD_URLS = {source["name"]: source["url"] for source in JOB_BOARD_SOURCES}
@@ -1026,6 +1029,149 @@ def write_records_to_firestore(records: List[JobRecord]) -> None:
             client.collection(FIREBASE_COLLECTION).document(doc_id).set(data, merge=True)
         except Exception:
             continue
+
+
+def run_smoke_test() -> None:
+    session = requests.Session()
+    session.headers.update({"User-Agent": USER_AGENT})
+
+    results: Dict[str, Dict[str, int]] = {}
+
+    # LinkedIn single-request probe
+    linkedin_count = 0
+    linkedin_status = 0
+    try:
+        resp = session.get(
+            "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search",
+            params={
+                "keywords": "product manager onboarding",
+                "location": "London, United Kingdom",
+                "f_TPR": "r604800",
+                "start": 0,
+            },
+            timeout=20,
+        )
+        linkedin_status = resp.status_code
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, "html.parser")
+            linkedin_count = len(soup.select("div.base-search-card"))
+    except requests.RequestException:
+        linkedin_status = 0
+
+    results["LinkedIn"] = {"count": linkedin_count, "status": linkedin_status}
+
+    # Greenhouse boards
+    gh_success = 0
+    gh_total = len(GREENHOUSE_BOARDS)
+    gh_jobs = 0
+    for board in GREENHOUSE_BOARDS:
+        url = f"https://boards-api.greenhouse.io/v1/boards/{board}/jobs"
+        try:
+            resp = session.get(url, timeout=20)
+        except requests.RequestException:
+            continue
+        if resp.status_code != 200:
+            continue
+        try:
+            data = resp.json()
+        except ValueError:
+            continue
+        gh_success += 1
+        gh_jobs += len(data.get("jobs", []))
+    results["Greenhouse"] = {"count": gh_jobs, "status": gh_success}
+
+    # Lever boards
+    lever_success = 0
+    lever_total = len(LEVER_BOARDS)
+    lever_jobs = 0
+    for board in LEVER_BOARDS:
+        url = f"https://api.lever.co/v0/postings/{board}?mode=json"
+        try:
+            resp = session.get(url, timeout=20)
+        except requests.RequestException:
+            continue
+        if resp.status_code != 200:
+            continue
+        try:
+            data = resp.json()
+        except ValueError:
+            continue
+        if isinstance(data, list):
+            lever_success += 1
+            lever_jobs += len(data)
+    results["Lever"] = {"count": lever_jobs, "status": lever_success}
+
+    # SmartRecruiters companies
+    sr_success = 0
+    sr_total = len(SMARTRECRUITERS_COMPANIES)
+    sr_jobs = 0
+    for company in SMARTRECRUITERS_COMPANIES:
+        url = f"https://api.smartrecruiters.com/v1/companies/{company}/postings"
+        try:
+            resp = session.get(url, params={"limit": 20, "offset": 0}, timeout=20)
+        except requests.RequestException:
+            continue
+        if resp.status_code != 200:
+            continue
+        try:
+            data = resp.json()
+        except ValueError:
+            continue
+        sr_success += 1
+        sr_jobs += len(data.get("content", []))
+    results["SmartRecruiters"] = {"count": sr_jobs, "status": sr_success}
+
+    # Ashby boards
+    ashby_success = 0
+    ashby_total = len(ASHBY_BOARDS)
+    ashby_jobs = 0
+    for board in ASHBY_BOARDS:
+        url = f"https://api.ashbyhq.com/posting-api/job-board/{board}"
+        try:
+            resp = session.get(url, timeout=20)
+        except requests.RequestException:
+            continue
+        if resp.status_code != 200:
+            continue
+        try:
+            data = resp.json()
+        except ValueError:
+            continue
+        postings = data.get("jobs") or data.get("postings") or []
+        if isinstance(postings, list):
+            ashby_success += 1
+            ashby_jobs += len(postings)
+    results["Ashby"] = {"count": ashby_jobs, "status": ashby_success}
+
+    # Job board feeds/APIs
+    board_results: Dict[str, Dict[str, int]] = {}
+    for source in JOB_BOARD_SOURCES:
+        count = 0
+        if source["type"] == "rss":
+            if feedparser is not None:
+                feed = feedparser.parse(source["url"])
+                count = len(feed.entries)
+        elif source["type"] == "api":
+            if source["name"] == "Remotive":
+                jobs = remotive_search(session)
+                count = len(jobs)
+            elif source["name"] == "RemoteOK":
+                jobs = remoteok_search(session)
+                count = len(jobs)
+            elif source["name"] == "Jobicy":
+                jobs = jobicy_search(session)
+                count = len(jobs)
+        board_results[source["name"]] = {"count": count, "status": 1 if count >= 0 else 0}
+
+    results.update(board_results)
+
+    print("Smoke test summary (counts are raw postings, not filtered):")
+    print(json.dumps(results, indent=2))
+    print("")
+    print(f"Greenhouse boards reachable: {gh_success}/{gh_total}")
+    print(f"Lever boards reachable: {lever_success}/{lever_total}")
+    print(f"SmartRecruiters companies reachable: {sr_success}/{sr_total}")
+    print(f"Ashby boards reachable: {ashby_success}/{ashby_total}")
 
 
 def linkedin_search(session: requests.Session) -> List[Dict[str, str]]:
@@ -1508,6 +1654,54 @@ def jobicy_search(session: requests.Session) -> List[Dict[str, str]]:
     return jobs
 
 
+def jobserve_search(session: requests.Session) -> List[Dict[str, str]]:
+    jobs: List[Dict[str, str]] = []
+    url = JOB_BOARD_URLS.get("JobServe")
+    if not url:
+        return jobs
+    try:
+        resp = session.get(url, timeout=25)
+    except requests.RequestException:
+        return jobs
+    if resp.status_code != 200:
+        return jobs
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    for item in soup.select("div.sjJobItem"):
+        title_el = item.select_one("a.sjJobLink")
+        if not title_el:
+            continue
+        title = normalize_text(title_el.get_text(" "))
+        link = urljoin(url, title_el.get("href", ""))
+        location_el = item.select_one("p.sjJobLocationSalary")
+        location = normalize_text(location_el.get_text(" ")) if location_el else ""
+        desc_el = item.select_one("p.sjJobDesc")
+        summary = normalize_text(desc_el.get_text(" ")) if desc_el else ""
+        posted_el = item.select_one("p.sjJobPosted")
+        posted_date = ""
+        if posted_el:
+            raw = normalize_text(posted_el.get_text(" "))
+            try:
+                dt = datetime.strptime(raw, "%m/%d/%Y %I:%M:%S %p")
+                posted_date = dt.replace(tzinfo=timezone.utc).isoformat()
+            except ValueError:
+                posted_date = raw
+
+        jobs.append(
+            {
+                "title": title,
+                "company": "JobServe",
+                "location": location or "United Kingdom",
+                "link": clean_link(link),
+                "posted_text": "",
+                "posted_date": posted_date,
+                "summary": summary,
+                "source": "JobServe",
+            }
+        )
+    return jobs
+
+
 def job_board_search(session: requests.Session) -> List[Dict[str, str]]:
     jobs: List[Dict[str, str]] = []
     for source in JOB_BOARD_SOURCES:
@@ -1520,6 +1714,9 @@ def job_board_search(session: requests.Session) -> List[Dict[str, str]]:
                 jobs.extend(remoteok_search(session))
             elif source["name"] == "Jobicy":
                 jobs.extend(jobicy_search(session))
+        elif source["type"] == "html":
+            if source["name"] == "JobServe":
+                jobs.extend(jobserve_search(session))
     return jobs
 
 
@@ -2024,4 +2221,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Daily job digest runner")
+    parser.add_argument("--smoke-test", action="store_true", help="Run a source connectivity smoke test")
+    args = parser.parse_args()
+
+    if args.smoke_test:
+        run_smoke_test()
+    else:
+        main()
