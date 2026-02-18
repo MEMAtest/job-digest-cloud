@@ -5,7 +5,7 @@ This repo runs a daily job search and emails a digest at **08:40 Europe/London**
 ## What it does
 
 - Searches for product roles in KYC/AML/onboarding domains.
-- Includes roles posted in the last **72 hours**.
+- Includes roles posted in the last **24 hours** by default (configurable).
 - Suppresses repeats using a cache (`sent_links.json`).
 - Sends one email per day at 08:40 (daily schedule).
 
@@ -19,6 +19,17 @@ This repo runs a daily job search and emails a digest at **08:40 Europe/London**
    - `SMTP_PASS` (Gmail App Password)
    - `FROM_EMAIL` (your Gmail)
    - `TO_EMAIL` (destination email)
+   - Optional job boards:
+     - `ADZUNA_APP_ID`
+     - `ADZUNA_APP_KEY`
+     - `JOOBLE_API_KEY`
+     - `REED_API_KEY`
+     - `CV_LIBRARY_API_KEY`
+   - Optional enrichment/portal:
+     - `GEMINI_API_KEY`
+     - `JOB_DIGEST_PROFILE`
+     - `FIREBASE_SERVICE_ACCOUNT_JSON`
+     - `FIREBASE_COLLECTION`
 3. Go to **Actions** and enable workflows.
 
 ## Schedule

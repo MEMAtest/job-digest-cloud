@@ -107,6 +107,12 @@ JOB_DIGEST_PROFILE = os.getenv(
     " compliance transformation experience across banks and RegTech platforms.",
 )
 
+ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID", "") or os.getenv("JOB_DIGEST_ADZUNA_APP_ID", "")
+ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY", "") or os.getenv("JOB_DIGEST_ADZUNA_APP_KEY", "")
+JOOBLE_API_KEY = os.getenv("JOOBLE_API_KEY", "") or os.getenv("JOB_DIGEST_JOOBLE_KEY", "")
+REED_API_KEY = os.getenv("REED_API_KEY", "") or os.getenv("JOB_DIGEST_REED_KEY", "")
+CV_LIBRARY_API_KEY = os.getenv("CV_LIBRARY_API_KEY", "") or os.getenv("JOB_DIGEST_CVLIB_KEY", "")
+
 FIREBASE_SERVICE_ACCOUNT_JSON = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "")
 FIREBASE_SERVICE_ACCOUNT_B64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64", "")
 FIREBASE_COLLECTION = os.getenv("FIREBASE_COLLECTION", "jobs")
@@ -631,6 +637,11 @@ JOB_BOARD_SOURCES = [
     {"name": "WorkAnywhere", "type": "rss", "url": "https://workanywhere.io/jobs.rss"},
     {"name": "RemoteYeah", "type": "rss", "url": "https://remoteyeah.com/jobs.rss"},
     {"name": "Jobicy", "type": "api", "url": "https://jobicy.com/api/v2/remote-jobs"},
+    {"name": "MeetFrank", "type": "api", "url": "https://api.meetfrank.com/ai/jobs"},
+    {"name": "Adzuna", "type": "api", "url": "https://api.adzuna.com/v1/api/jobs/gb/search/1"},
+    {"name": "Jooble", "type": "api", "url": "https://jooble.org/api"},
+    {"name": "Reed", "type": "api", "url": "https://www.reed.co.uk/api/1.0/search"},
+    {"name": "CVLibrary", "type": "api", "url": "https://www.cv-library.co.uk/search-jobs-json"},
     {"name": "JobServe", "type": "html", "url": "https://jobserve.com/gb/en/Job-Search/"},
 ]
 
@@ -652,13 +663,27 @@ def build_sources_summary() -> str:
         f"Ashby ({len(ASHBY_BOARDS)})"
     )
 
-    return " · ".join(
+    summary = " · ".join(
         [
             "LinkedIn (guest search + company search)",
             boards_summary,
             ats_summary,
         ]
     )
+
+    missing_keys = []
+    if not (ADZUNA_APP_ID and ADZUNA_APP_KEY):
+        missing_keys.append("Adzuna")
+    if not JOOBLE_API_KEY:
+        missing_keys.append("Jooble")
+    if not REED_API_KEY:
+        missing_keys.append("Reed")
+    if not CV_LIBRARY_API_KEY:
+        missing_keys.append("CVLibrary")
+    if missing_keys:
+        summary = f"{summary} · APIs pending: {', '.join(missing_keys)}"
+
+    return summary
 
 
 def now_utc() -> datetime:
@@ -806,7 +831,16 @@ def parse_posted_within_window(posted_text: str, posted_date: str, window_hours:
             try:
                 dt = parsedate_to_datetime(posted_date)
             except (TypeError, ValueError):
-                return False
+                if posted_date.isdigit():
+                    try:
+                        ts = int(posted_date)
+                        if ts > 10_000_000_000:
+                            ts = ts / 1000
+                        dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+                    except (ValueError, OSError):
+                        return False
+                else:
+                    return False
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         else:
@@ -1147,6 +1181,7 @@ def run_smoke_test() -> None:
     board_results: Dict[str, Dict[str, int]] = {}
     for source in JOB_BOARD_SOURCES:
         count = 0
+        status = 1
         if source["type"] == "rss":
             if feedparser is not None:
                 feed = feedparser.parse(source["url"])
@@ -1161,11 +1196,38 @@ def run_smoke_test() -> None:
             elif source["name"] == "Jobicy":
                 jobs = jobicy_search(session)
                 count = len(jobs)
+            elif source["name"] == "MeetFrank":
+                jobs = meetfrank_search(session)
+                count = len(jobs)
+            elif source["name"] == "Adzuna":
+                if not (ADZUNA_APP_ID and ADZUNA_APP_KEY):
+                    status = 0
+                else:
+                    jobs = adzuna_search(session)
+                    count = len(jobs)
+            elif source["name"] == "Jooble":
+                if not JOOBLE_API_KEY:
+                    status = 0
+                else:
+                    jobs = jooble_search(session)
+                    count = len(jobs)
+            elif source["name"] == "Reed":
+                if not REED_API_KEY:
+                    status = 0
+                else:
+                    jobs = reed_search(session)
+                    count = len(jobs)
+            elif source["name"] == "CVLibrary":
+                if not CV_LIBRARY_API_KEY:
+                    status = 0
+                else:
+                    jobs = cvlibrary_search(session)
+                    count = len(jobs)
         elif source["type"] == "html":
             if source["name"] == "JobServe":
                 jobs = jobserve_search(session)
                 count = len(jobs)
-        board_results[source["name"]] = {"count": count, "status": 1 if count >= 0 else 0}
+        board_results[source["name"]] = {"count": count, "status": status}
 
     results.update(board_results)
 
@@ -1658,6 +1720,240 @@ def jobicy_search(session: requests.Session) -> List[Dict[str, str]]:
     return jobs
 
 
+def meetfrank_search(session: requests.Session) -> List[Dict[str, str]]:
+    jobs: List[Dict[str, str]] = []
+    url = JOB_BOARD_URLS.get("MeetFrank")
+    if not url:
+        return jobs
+
+    for keyword in BOARD_KEYWORDS[:3]:
+        params = {
+            "q": keyword,
+            "country": "United Kingdom",
+            "location": "London",
+            "pageSize": 100,
+            "language": "en",
+        }
+        try:
+            resp = session.get(url, params=params, timeout=25)
+        except requests.RequestException:
+            continue
+        if resp.status_code != 200:
+            continue
+        try:
+            data = resp.json()
+        except ValueError:
+            continue
+        for job in data.get("jobs", []):
+            title = job.get("title", "")
+            if not title:
+                continue
+            jobs.append(
+                {
+                    "title": title,
+                    "company": job.get("company", ""),
+                    "location": job.get("location", ""),
+                    "link": job.get("applyUrl", "") or job.get("url", ""),
+                    "posted_text": "",
+                    "posted_date": job.get("publishedAt", ""),
+                    "summary": normalize_text((job.get("description") or "")[:500]),
+                    "source": "MeetFrank",
+                }
+            )
+        time.sleep(0.2)
+    return jobs
+
+
+def adzuna_search(session: requests.Session) -> List[Dict[str, str]]:
+    jobs: List[Dict[str, str]] = []
+    if not (ADZUNA_APP_ID and ADZUNA_APP_KEY):
+        return jobs
+    url = JOB_BOARD_URLS.get("Adzuna")
+    if not url:
+        return jobs
+
+    for keyword in BOARD_KEYWORDS[:3]:
+        params = {
+            "app_id": ADZUNA_APP_ID,
+            "app_key": ADZUNA_APP_KEY,
+            "what": keyword,
+            "where": "London",
+            "results_per_page": 50,
+            "sort_by": "date",
+            "content-type": "application/json",
+        }
+        try:
+            resp = session.get(url, params=params, timeout=25)
+        except requests.RequestException:
+            continue
+        if resp.status_code != 200:
+            continue
+        try:
+            data = resp.json()
+        except ValueError:
+            continue
+        for job in data.get("results", []):
+            title = job.get("title", "")
+            if not title:
+                continue
+            company = (job.get("company") or {}).get("display_name", "")
+            location = (job.get("location") or {}).get("display_name", "")
+            jobs.append(
+                {
+                    "title": title,
+                    "company": company,
+                    "location": location,
+                    "link": job.get("redirect_url", ""),
+                    "posted_text": "",
+                    "posted_date": job.get("created", ""),
+                    "summary": normalize_text((job.get("description") or "")[:500]),
+                    "source": "Adzuna",
+                }
+            )
+        time.sleep(0.2)
+    return jobs
+
+
+def jooble_search(session: requests.Session) -> List[Dict[str, str]]:
+    jobs: List[Dict[str, str]] = []
+    if not JOOBLE_API_KEY:
+        return jobs
+    base_url = JOB_BOARD_URLS.get("Jooble")
+    if not base_url:
+        return jobs
+    url = f"{base_url.rstrip('/')}/{JOOBLE_API_KEY}"
+
+    for keyword in BOARD_KEYWORDS[:3]:
+        payload = {
+            "keywords": keyword,
+            "location": "London",
+            "page": 1,
+            "radius": 20,
+        }
+        try:
+            resp = session.post(url, json=payload, timeout=25)
+        except requests.RequestException:
+            continue
+        if resp.status_code != 200:
+            continue
+        try:
+            data = resp.json()
+        except ValueError:
+            continue
+        for job in data.get("jobs", []) or []:
+            title = job.get("title", "")
+            if not title:
+                continue
+            jobs.append(
+                {
+                    "title": title,
+                    "company": job.get("company", ""),
+                    "location": job.get("location", ""),
+                    "link": job.get("link", "") or job.get("url", ""),
+                    "posted_text": "",
+                    "posted_date": job.get("updated", "") or job.get("date", ""),
+                    "summary": normalize_text((job.get("snippet") or job.get("description") or "")[:500]),
+                    "source": "Jooble",
+                }
+            )
+        time.sleep(0.2)
+    return jobs
+
+
+def reed_search(session: requests.Session) -> List[Dict[str, str]]:
+    jobs: List[Dict[str, str]] = []
+    if not REED_API_KEY:
+        return jobs
+    url = JOB_BOARD_URLS.get("Reed")
+    if not url:
+        return jobs
+
+    for keyword in BOARD_KEYWORDS[:3]:
+        params = {
+            "keywords": keyword,
+            "locationName": "London",
+            "distanceFromLocation": 25,
+            "resultsToTake": 50,
+            "resultsToSkip": 0,
+        }
+        try:
+            resp = session.get(url, params=params, auth=(REED_API_KEY, ""), timeout=25)
+        except requests.RequestException:
+            continue
+        if resp.status_code != 200:
+            continue
+        try:
+            data = resp.json()
+        except ValueError:
+            continue
+        for job in data.get("results", []) or []:
+            title = job.get("jobTitle") or job.get("job_title") or job.get("title") or ""
+            if not title:
+                continue
+            jobs.append(
+                {
+                    "title": title,
+                    "company": job.get("employerName", ""),
+                    "location": job.get("locationName", ""),
+                    "link": job.get("jobUrl", ""),
+                    "posted_text": "",
+                    "posted_date": job.get("date", ""),
+                    "summary": normalize_text((job.get("jobDescription") or "")[:500]),
+                    "source": "Reed",
+                }
+            )
+        time.sleep(0.2)
+    return jobs
+
+
+def cvlibrary_search(session: requests.Session) -> List[Dict[str, str]]:
+    jobs: List[Dict[str, str]] = []
+    if not CV_LIBRARY_API_KEY:
+        return jobs
+    url = JOB_BOARD_URLS.get("CVLibrary")
+    if not url:
+        return jobs
+
+    for keyword in BOARD_KEYWORDS[:3]:
+        params = {
+            "key": CV_LIBRARY_API_KEY,
+            "q": keyword,
+            "geo": "London",
+            "distance": 20,
+            "tempperm": "Permanent",
+            "perpage": 50,
+            "orderby": "date",
+        }
+        try:
+            resp = session.get(url, params=params, timeout=25)
+        except requests.RequestException:
+            continue
+        if resp.status_code != 200:
+            continue
+        try:
+            data = resp.json()
+        except ValueError:
+            continue
+        for job in data.get("jobs", []) or data.get("results", []) or []:
+            title = job.get("title") or job.get("job_title") or ""
+            if not title:
+                continue
+            jobs.append(
+                {
+                    "title": title,
+                    "company": job.get("company") or job.get("company_name") or "",
+                    "location": job.get("location") or job.get("geo") or "",
+                    "link": job.get("job_url") or job.get("joburl") or job.get("url") or "",
+                    "posted_text": "",
+                    "posted_date": job.get("date") or job.get("posted") or job.get("date_posted") or "",
+                    "summary": normalize_text((job.get("description") or job.get("short_description") or "")[:500]),
+                    "source": "CVLibrary",
+                }
+            )
+        time.sleep(0.2)
+    return jobs
+
+
 def jobserve_search(session: requests.Session) -> List[Dict[str, str]]:
     jobs: List[Dict[str, str]] = []
     url = JOB_BOARD_URLS.get("JobServe")
@@ -1807,6 +2103,16 @@ def job_board_search(session: requests.Session) -> List[Dict[str, str]]:
                 jobs.extend(remoteok_search(session))
             elif source["name"] == "Jobicy":
                 jobs.extend(jobicy_search(session))
+            elif source["name"] == "MeetFrank":
+                jobs.extend(meetfrank_search(session))
+            elif source["name"] == "Adzuna":
+                jobs.extend(adzuna_search(session))
+            elif source["name"] == "Jooble":
+                jobs.extend(jooble_search(session))
+            elif source["name"] == "Reed":
+                jobs.extend(reed_search(session))
+            elif source["name"] == "CVLibrary":
+                jobs.extend(cvlibrary_search(session))
         elif source["type"] == "html":
             if source["name"] == "JobServe":
                 jobs.extend(jobserve_search(session))
