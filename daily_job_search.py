@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -796,9 +797,13 @@ def parse_posted_within_window(posted_text: str, posted_date: str, window_hours:
 
     if posted_date:
         try:
-            dt = datetime.fromisoformat(posted_date)
+            cleaned = posted_date.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(cleaned)
         except ValueError:
-            return False
+            try:
+                dt = parsedate_to_datetime(posted_date)
+            except (TypeError, ValueError):
+                return False
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         else:
