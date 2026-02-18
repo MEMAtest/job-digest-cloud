@@ -75,6 +75,7 @@ TZ_NAME = os.getenv("JOB_DIGEST_TZ", "Europe/London")
 WINDOW_HOURS = int(os.getenv("JOB_DIGEST_WINDOW_HOURS", "24"))
 MIN_SCORE = int(os.getenv("JOB_DIGEST_MIN_SCORE", "70"))
 MAX_EMAIL_ROLES = int(os.getenv("JOB_DIGEST_MAX_EMAIL_ROLES", "12"))
+COMPANY_SEARCH_LIMIT = int(os.getenv("JOB_DIGEST_COMPANY_SEARCH_LIMIT", "60"))
 PREFERENCES = os.getenv(
     "JOB_DIGEST_PREFERENCES",
     "London or remote UK · Product/Platform roles · KYC/AML/Onboarding/Sanctions/Screening · Min fit 70%",
@@ -117,6 +118,10 @@ WORKDAY_SITES = [
     for entry in os.getenv("JOB_DIGEST_WORKDAY_SITES", "").split(",")
     if entry.strip()
 ]
+WORKDAY_SITES_FILE = Path(os.getenv("JOB_DIGEST_WORKDAY_FILE", str(BASE_DIR / "workday_sites.txt")))
+COMPANY_TARGETS_PATH = Path(
+    os.getenv("JOB_DIGEST_COMPANY_TARGETS", str(BASE_DIR / "company_targets_uk.txt"))
+)
 
 FIREBASE_SERVICE_ACCOUNT_JSON = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "")
 FIREBASE_SERVICE_ACCOUNT_B64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64", "")
@@ -707,6 +712,37 @@ def dedupe_keep_order(items: List[str]) -> List[str]:
     return deduped
 
 
+def load_target_list(path: Path) -> List[str]:
+    if not path.exists():
+        return []
+    lines = []
+    for line in path.read_text().splitlines():
+        cleaned = line.strip()
+        if not cleaned or cleaned.startswith("#"):
+            continue
+        lines.append(cleaned)
+    return lines
+
+
+def select_company_batch(companies: List[str]) -> List[str]:
+    if COMPANY_SEARCH_LIMIT <= 0 or len(companies) <= COMPANY_SEARCH_LIMIT:
+        return companies
+    day_index = int(datetime.now().strftime("%j"))
+    offset = (day_index * COMPANY_SEARCH_LIMIT) % len(companies)
+    return [companies[(offset + idx) % len(companies)] for idx in range(COMPANY_SEARCH_LIMIT)]
+
+
+extra_company_targets = load_target_list(COMPANY_TARGETS_PATH)
+if extra_company_targets:
+    SEARCH_COMPANIES.extend(extra_company_targets)
+SEARCH_COMPANIES = dedupe_keep_order(SEARCH_COMPANIES)
+
+workday_file_entries = load_target_list(WORKDAY_SITES_FILE)
+if workday_file_entries:
+    WORKDAY_SITES.extend(workday_file_entries)
+WORKDAY_SITES = dedupe_keep_order(WORKDAY_SITES)
+
+
 for board in EXTRA_GREENHOUSE:
     if board not in GREENHOUSE_BOARDS:
         GREENHOUSE_BOARDS.append(board)
@@ -761,6 +797,10 @@ def build_sources_summary() -> str:
 
     board_names = [source["name"] for source in JOB_BOARD_SOURCES]
     boards_summary = f"Job boards ({len(board_names)}): " + ", ".join(board_names)
+    company_batch = select_company_batch(SEARCH_COMPANIES)
+    company_summary = (
+        f"Company targets ({len(SEARCH_COMPANIES)} total / {len(company_batch)} per run)"
+    )
 
     ats_summary = (
         "ATS boards: "
@@ -773,6 +813,7 @@ def build_sources_summary() -> str:
     summary = " · ".join(
         [
             "LinkedIn (guest search + company search)",
+            company_summary,
             boards_summary,
             ats_summary,
         ]
@@ -1453,7 +1494,7 @@ def linkedin_search(session: requests.Session) -> List[Dict[str, str]]:
                 time.sleep(0.3)
 
     # Company-focused searches (narrower paging to reduce load)
-    for company in SEARCH_COMPANIES:
+    for company in select_company_batch(SEARCH_COMPANIES):
         for base_term in COMPANY_SEARCH_TERMS:
             keywords = f"{base_term} {company}"
             for location in SEARCH_LOCATIONS:
@@ -2325,6 +2366,10 @@ def html_board_search(
             job_map[link]["posted_date"] = details.get("posted_date") or job_map[link]["posted_date"]
             if details.get("summary"):
                 job_map[link]["summary"] = details["summary"]
+        if not job_map[link]["posted_text"] and not job_map[link]["posted_date"]:
+            posted_text = extract_relative_posted_text(resp.text)
+            if posted_text:
+                job_map[link]["posted_text"] = posted_text
         time.sleep(0.2)
 
     jobs.extend(job_map.values())

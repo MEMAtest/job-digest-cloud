@@ -44,7 +44,7 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
           JOB_DIGEST_PROFILE: ${{ secrets.JOB_DIGEST_PROFILE }}
           JOB_DIGEST_EMAIL_ENABLED: "true"
-          JOB_DIGEST_WINDOW_HOURS: "168"
+          JOB_DIGEST_WINDOW_HOURS: "72"
           JOB_DIGEST_MIN_SCORE: "65"
           JOB_DIGEST_MAX_EMAIL_ROLES: "12"
           JOB_DIGEST_TZ: "Europe/London"

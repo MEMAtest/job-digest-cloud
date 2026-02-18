@@ -1,0 +1,190 @@
+Barclays
+HSBC
+NatWest
+Lloyds
+Lloyds Banking Group
+Santander
+Nationwide
+TSB
+Virgin Money
+Metro Bank
+Tesco Bank
+Coutts
+Standard Chartered
+Citi
+JPMorgan
+JPMorgan Chase
+JPMorgan Chase & Co
+Goldman Sachs
+Morgan Stanley
+Bank of America
+Deutsche Bank
+UBS
+BNP Paribas
+Société Générale
+Societe Generale
+Crédit Agricole
+Credit Agricole
+RBC
+ING
+Rabobank
+ABN AMRO
+UniCredit
+BNY Mellon
+State Street
+Northern Trust
+BlackRock
+Vanguard
+Fidelity
+Nomura
+Mizuho
+MUFG
+SMBC
+Macquarie
+Jefferies
+Rothschild
+LSEG
+Wise
+Revolut
+Monzo
+Starling
+Engine by Starling
+Tide
+Zopa
+OakNorth
+Atom Bank
+ClearBank
+Kroo
+Chip
+Curve
+Checkout.com
+Stripe
+Adyen
+Worldpay
+GoCardless
+Modulr
+TrueLayer
+Tink
+Plaid
+Airwallex
+Rapyd
+Marqeta
+Mambu
+Thought Machine
+Temenos
+Avaloq
+Funding Circle
+Lendable
+Zilch
+Solaris
+Soldo
+Pleo
+Yapily
+PayPal
+Block
+Square
+Fenergo
+Quantexa
+ComplyAdvantage
+LexisNexis Risk
+NICE Actimize
+Actimize
+Pega
+FIS
+Moody's
+S&P Global
+Oracle
+Appian
+Dow Jones
+Napier
+Trulioo
+Onfido
+Sumsub
+Veriff
+Feedzai
+Socure
+Kyckr
+KYC360
+Ripjar
+FinScan
+IMTF
+Saphyre
+SymphonyAI
+Alloy
+Incode
+Norbloc
+smartKYC
+KYC Portal
+Encompass
+Sigma360
+Davies
+Google
+Microsoft
+Amazon
+Apple
+Meta
+Salesforce
+SAP
+Monument Bank Limited
+Allica Bank
+LendingCrowd
+OneDome
+Monavate
+Creditspring
+Penfold
+Love Finance
+Flagstone
+Moneybox
+Gen H
+Flow Global
+ANNA Money
+Verto
+Hozah
+C365Cloud
+CleverChain
+Konfir
+Adclear
+Profylr
+RiskSmart
+TAINA Technology
+Red Flag Alert
+Datactics
+Ravelin
+Proxymity
+Vera
+iProov
+Cygnetise
+REGnosys
+AuditComply
+CheckedSafe
+Forensic Analytics
+Fable Data
+Nuggets
+Detected
+Derivitec
+OneID
+Risk Ledger
+Recordsure
+FNA
+Novatus
+NorthRow
+Cambridge Intelligence
+Elliptic
+Armalytix
+CUBE
+FundApps
+FinCrime Dynamics
+Arkk Solutions
+E-Sign
+SmartStream
+Blackdot Solutions
+Thirdfort
+Voxsmart
+Wordwatch
+Ruleguard
+Kaizen
+Infinian
+Global Screening Services
+ProofID
+Credit Benchmark
+Neotas

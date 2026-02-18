@@ -9,6 +9,8 @@ This repo runs a daily job search and emails a digest at **08:40 Europe/London**
 - Suppresses repeats using a cache (`sent_links.json`).
 - Sends one email per day at 08:40 (daily schedule).
 - Includes direct UK boards (Totaljobs, CWJobs, Jobsite, eFinancialCareers, IndeedUK) plus RSS sources.
+- Targets a curated company list from `company_targets_uk.txt` (banks, fintechs, regtechs).
+- Can pull Workday feeds from `workday_sites.txt` or the `JOB_DIGEST_WORKDAY_SITES` env var.
 
 ## Setup (GitHub Actions)
 
@@ -33,6 +35,11 @@ This repo runs a daily job search and emails a digest at **08:40 Europe/London**
      - `JOB_DIGEST_ASHBY_BOARDS` (comma-separated)
    - Optional Workday feeds:
      - `JOB_DIGEST_WORKDAY_SITES` (comma-separated Workday job site URLs; format: `Company Name|https://company.wd3.myworkdayjobs.com/Company_Careers`)
+     - `JOB_DIGEST_WORKDAY_FILE` (path to a text file, defaults to `workday_sites.txt`)
+   - Optional company targets:
+     - `JOB_DIGEST_COMPANY_TARGETS` (path to a text file, defaults to `company_targets_uk.txt`)
+   - Optional LinkedIn company batching:
+     - `JOB_DIGEST_COMPANY_SEARCH_LIMIT` (max companies to query per run; defaults to 60, rotates daily)
    - Optional enrichment/portal:
      - `GEMINI_API_KEY`
      - `JOB_DIGEST_PROFILE`
@@ -49,5 +56,7 @@ This repo runs a daily job search and emails a digest at **08:40 Europe/London**
 
 - `daily_job_search.py`
 - `requirements.txt`
+- `company_targets_uk.txt`
+- `workday_sites.txt`
 - `.github/workflows/daily_digest.yml`
 - `.gitignore`
