@@ -183,6 +183,13 @@ BOARD_KEYWORDS = [
     "product manager fraud",
     "product manager financial crime",
 ]
+BROAD_BOARD_KEYWORDS = [
+    "product manager",
+    "product owner",
+    "product lead",
+    "product director",
+    "product operations",
+]
 
 COMPANY_SEARCH_TERMS = [
     "product manager",
@@ -2377,11 +2384,11 @@ def workday_search(session: requests.Session) -> List[Dict[str, str]]:
         if not host or not tenant or not site:
             continue
         api_url = f"{scheme}://{host}/wday/cxs/{tenant}/{site}/jobs"
-        for keyword in BOARD_KEYWORDS[:2]:
+        for keyword in BROAD_BOARD_KEYWORDS[:3]:
             payload = {
-                "limit": 50,
+                "limit": 20,
                 "offset": 0,
-                "searchText": f"{keyword} London",
+                "searchText": f"{keyword}",
             }
             try:
                 resp = session.post(api_url, json=payload, timeout=30)
@@ -2641,7 +2648,7 @@ def technojobs_search(session: requests.Session) -> List[Dict[str, str]]:
         return jobs
 
     job_map: Dict[str, Dict[str, str]] = {}
-    for keyword in BOARD_KEYWORDS[:2]:
+    for keyword in BROAD_BOARD_KEYWORDS[:3]:
         slug = slugify(keyword)
         search_url = f"{base_url}/{slug}-jobs/london"
         try:
@@ -2652,28 +2659,36 @@ def technojobs_search(session: requests.Session) -> List[Dict[str, str]]:
             continue
 
         soup = BeautifulSoup(resp.text, "html.parser")
+        candidates: List[str] = []
         for anchor in soup.find_all("a", href=True):
             href = anchor.get("href", "")
-            if "jobid=" not in href and "/job/" not in href:
+            if "jobid=" not in href and "/job/" not in href and "job" not in href:
                 continue
+            candidates.append(href)
+
+        for href in candidates:
             link = urljoin(base_url, href) if href.startswith("/") else href
             link = clean_link(link)
             if not link or link in job_map:
                 continue
-            title = normalize_text(anchor.get_text(" "))
+            title = ""
+            anchor = soup.find("a", href=href)
+            if anchor:
+                title = normalize_text(anchor.get_text(" "))
             if len(title) < 4:
-                continue
+                title = "Product role"
 
             posted_text = ""
-            container = anchor
-            for _ in range(4):
-                if not container:
-                    break
-                text_blob = normalize_text(container.get_text(" "))
-                posted_text = extract_relative_posted_text(text_blob)
-                if posted_text:
-                    break
-                container = container.parent
+            if anchor:
+                container = anchor
+                for _ in range(4):
+                    if not container:
+                        break
+                    text_blob = normalize_text(container.get_text(" "))
+                    posted_text = extract_relative_posted_text(text_blob)
+                    if posted_text:
+                        break
+                    container = container.parent
 
             job_map[link] = {
                 "title": title,
@@ -2698,7 +2713,7 @@ def indeed_search(session: requests.Session) -> List[Dict[str, str]]:
         return jobs
 
     rss_jobs: List[Dict[str, str]] = []
-    for keyword in BOARD_KEYWORDS[:2]:
+    for keyword in BROAD_BOARD_KEYWORDS[:3]:
         rss_url = f"{base_url}/rss?q={quote_plus(keyword)}&l=London&sort=date"
         entries = []
         if feedparser is not None:
@@ -2737,8 +2752,8 @@ def indeed_search(session: requests.Session) -> List[Dict[str, str]]:
         return rss_jobs
 
     job_map: Dict[str, Dict[str, str]] = {}
-    for keyword in BOARD_KEYWORDS[:3]:
-        params = {"q": keyword, "l": "London"}
+    for keyword in BROAD_BOARD_KEYWORDS[:3]:
+        params = {"q": keyword, "l": "London", "fromage": 3, "sort": "date"}
         try:
             resp = session.get(f"{base_url}/jobs", params=params, timeout=30)
         except requests.RequestException:
@@ -2828,9 +2843,15 @@ def builtin_london_search(session: requests.Session) -> List[Dict[str, str]]:
         return jobs
 
     job_map: Dict[str, Dict[str, str]] = {}
-    for keyword in BOARD_KEYWORDS[:3]:
-        slug = slugify(keyword)
-        search_url = f"{base_url}/jobs/product/search/{slug}"
+    search_paths = [
+        "/jobs/product/search/product-manager",
+        "/jobs/product/search/product-owner",
+        "/jobs/product/search/product-lead",
+        "/jobs/product/search/product-director",
+        "/jobs/product/search/product-operations",
+    ]
+    for path in search_paths:
+        search_url = f"{base_url}{path}"
         try:
             resp = session.get(search_url, timeout=30)
         except requests.RequestException:
@@ -2839,72 +2860,6 @@ def builtin_london_search(session: requests.Session) -> List[Dict[str, str]]:
             continue
 
         soup = BeautifulSoup(resp.text, "html.parser")
-        found_any = False
-        script = soup.find("script", id="__NEXT_DATA__")
-        if script and script.string:
-            try:
-                data = json.loads(script.string)
-            except ValueError:
-                data = {}
-
-            def iter_nodes(obj: object) -> Iterable[Dict[str, object]]:
-                if isinstance(obj, dict):
-                    if {"title", "companyName", "jobUrl"}.issubset(obj.keys()):
-                        yield obj
-                    if {"title", "company", "url"}.issubset(obj.keys()):
-                        yield obj
-                    for val in obj.values():
-                        yield from iter_nodes(val)
-                elif isinstance(obj, list):
-                    for item in obj:
-                        yield from iter_nodes(item)
-
-            for node in iter_nodes(data):
-                title = node.get("title") if isinstance(node.get("title"), str) else ""
-                if not title:
-                    continue
-                company = ""
-                if isinstance(node.get("companyName"), str):
-                    company = node.get("companyName")
-                elif isinstance(node.get("company"), str):
-                    company = node.get("company")
-                link = ""
-                if isinstance(node.get("jobUrl"), str):
-                    link = node.get("jobUrl")
-                elif isinstance(node.get("url"), str):
-                    link = node.get("url")
-                if link and link.startswith("/"):
-                    link = urljoin(base_url, link)
-                link = clean_link(link)
-                if not link or link in job_map:
-                    continue
-                location = ""
-                if isinstance(node.get("location"), str):
-                    location = node.get("location")
-                elif isinstance(node.get("jobLocation"), str):
-                    location = node.get("jobLocation")
-                posted_date = ""
-                if isinstance(node.get("postedDate"), str):
-                    posted_date = node.get("postedDate")
-                summary = ""
-                if isinstance(node.get("description"), str):
-                    summary = normalize_text(node.get("description"))[:500]
-                job_map[link] = {
-                    "title": title,
-                    "company": company or "BuiltIn",
-                    "location": location or "London",
-                    "link": link,
-                    "posted_text": "",
-                    "posted_date": posted_date,
-                    "summary": summary,
-                    "source": "BuiltInLondon",
-                }
-                found_any = True
-
-        if found_any:
-            time.sleep(0.2)
-            continue
-
         for anchor in soup.find_all("a", href=True):
             href = anchor.get("href", "")
             if "/job/" not in href:
@@ -2915,6 +2870,8 @@ def builtin_london_search(session: requests.Session) -> List[Dict[str, str]]:
                 continue
             title = normalize_text(anchor.get_text(" "))
             if len(title) < 4:
+                continue
+            if "image" in title.lower():
                 continue
 
             posted_text = ""
@@ -2938,6 +2895,24 @@ def builtin_london_search(session: requests.Session) -> List[Dict[str, str]]:
                 "summary": "",
                 "source": "BuiltInLondon",
             }
+        time.sleep(0.2)
+
+    detail_links = list(job_map.keys())[:15]
+    for link in detail_links:
+        try:
+            resp = session.get(link, timeout=30)
+        except requests.RequestException:
+            continue
+        if resp.status_code != 200:
+            continue
+        details = parse_job_detail_jsonld(resp.text, job_map[link]["title"])
+        if details:
+            job_map[link]["title"] = details.get("title") or job_map[link]["title"]
+            job_map[link]["company"] = details.get("company") or job_map[link]["company"]
+            job_map[link]["location"] = details.get("location") or job_map[link]["location"]
+            job_map[link]["posted_date"] = details.get("posted_date") or job_map[link]["posted_date"]
+            if details.get("summary"):
+                job_map[link]["summary"] = details["summary"]
         time.sleep(0.2)
 
     jobs.extend(job_map.values())
