@@ -52,7 +52,7 @@ jobs:
           JOB_DIGEST_GEMINI_MAX_JOBS: "20"
           JOB_DIGEST_BASE_DIR: "."
           JOB_DIGEST_SEEN_CACHE_DAYS: "14"
-          JOB_DIGEST_RUN_AT: "08:40"
+          JOB_DIGEST_RUN_ATS: "08:40,13:00,18:30"
           JOB_DIGEST_RUN_WINDOW_MINUTES: "20"
         run: |
           python daily_job_search.py

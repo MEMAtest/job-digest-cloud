@@ -5,3 +5,4 @@ openpyxl
 feedparser
 firebase-admin
 google-generativeai
+pdfplumber

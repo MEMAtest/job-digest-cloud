@@ -1,0 +1,151 @@
+firm,category,platform,careers_url,feed_url,workday_entry,notes,source
+Barclays,Bank,Custom,https://search.jobs.barclays/,,,Careers search site,Barclays careers
+HSBC,Bank,Custom,https://apply.careers.hsbc.com/,,,Candidate portal,HSBC careers
+Lloyds Banking Group,Bank,Workday,https://lbg.wd3.myworkdayjobs.com/LBG_Careers,,Lloyds Banking Group|https://lbg.wd3.myworkdayjobs.com/LBG_Careers,Workday careers site,Lloyds Workday
+NatWest Group,Bank,Custom,https://jobs.natwestgroup.com/,,,Careers site,NatWest careers
+Santander UK,Bank,Custom,https://www.santander.com/en/careers/uk-careers,,,UK careers site,Santander UK careers
+Standard Chartered,Bank,Custom,https://jobs.standardchartered.com/,,,Global jobs portal,Standard Chartered careers
+JPMorgan Chase,Bank,Custom,https://careers.jpmorgan.com/,,,Global careers site,JPMorgan careers
+Goldman Sachs,Bank,Custom,https://www.goldmansachs.com/careers,,,Careers site,Goldman Sachs careers
+Morgan Stanley,Bank,Custom,https://www.morganstanley.com/careers/career-opportunities-search/,,,Careers search page,Morgan Stanley careers
+Bank of America,Bank,Custom,https://careers.bankofamerica.com/,,,Careers site,Bank of America careers
+Citi,Bank,Custom,https://jobs.citi.com/,,,Careers site,Citi careers
+Deutsche Bank,Bank,Custom,https://careers.db.com/,,,Careers site,Deutsche Bank careers
+UBS,Bank,Custom,https://careers-ubs.com/,,,Careers portal,UBS careers
+BNP Paribas,Bank,Custom,https://usa.bnpparibas/en/homepage/join-us/,,,Join Us site (global),BNP Paribas careers
+BlackRock,Bank,Custom,https://careers.blackrock.com/,,,Careers site,BlackRock careers
+State Street,Bank,Custom,https://careers.statestreet.com/,,,Careers site,State Street careers
+RBC,Bank,Custom,https://jobs.rbc.com/en,,,Careers site,RBC careers
+ING,Bank,Custom,https://careers.ing.com/en,,,Careers site,ING careers
+BNY Mellon,Bank,Custom,https://www.bny.com/corporate/global/en/careers.html,,,Careers site,BNY careers
+Complyadvantage,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/complyadvantage,https://boards-api.greenhouse.io/v1/boards/complyadvantage/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Appian,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/appian,https://boards-api.greenhouse.io/v1/boards/appian/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Socure,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/socure,https://boards-api.greenhouse.io/v1/boards/socure/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Symphonyai,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/symphonyai,https://boards-api.greenhouse.io/v1/boards/symphonyai/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Entrust,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/entrust,https://boards-api.greenhouse.io/v1/boards/entrust/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Quantexa,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/quantexa,https://boards-api.greenhouse.io/v1/boards/quantexa/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Kyckr,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/kyckr,https://boards-api.greenhouse.io/v1/boards/kyckr/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Kyc360,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/kyc360,https://boards-api.greenhouse.io/v1/boards/kyc360/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Ripjar,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/ripjar,https://boards-api.greenhouse.io/v1/boards/ripjar/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Fenergo,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/fenergo,https://boards-api.greenhouse.io/v1/boards/fenergo/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Veriff,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/veriff,https://boards-api.greenhouse.io/v1/boards/veriff/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Onfido,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/onfido,https://boards-api.greenhouse.io/v1/boards/onfido/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Trulioo,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/trulioo,https://boards-api.greenhouse.io/v1/boards/trulioo/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Sumsub,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/sumsub,https://boards-api.greenhouse.io/v1/boards/sumsub/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Napier,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/napier,https://boards-api.greenhouse.io/v1/boards/napier/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Plaid,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/plaid,https://boards-api.greenhouse.io/v1/boards/plaid/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Marqeta,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/marqeta,https://boards-api.greenhouse.io/v1/boards/marqeta/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Checkoutcom,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/checkoutcom,https://boards-api.greenhouse.io/v1/boards/checkoutcom/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Gocardless,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/gocardless,https://boards-api.greenhouse.io/v1/boards/gocardless/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Truelayer,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/truelayer,https://boards-api.greenhouse.io/v1/boards/truelayer/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Tink,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/tink,https://boards-api.greenhouse.io/v1/boards/tink/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Mollie,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/mollie,https://boards-api.greenhouse.io/v1/boards/mollie/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Klarna,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/klarna,https://boards-api.greenhouse.io/v1/boards/klarna/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Airwallex,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/airwallex,https://boards-api.greenhouse.io/v1/boards/airwallex/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Modulr,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/modulr,https://boards-api.greenhouse.io/v1/boards/modulr/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Mambu,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/mambu,https://boards-api.greenhouse.io/v1/boards/mambu/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Zopa,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/zopa,https://boards-api.greenhouse.io/v1/boards/zopa/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Thought Machine,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/thought-machine,https://boards-api.greenhouse.io/v1/boards/thought-machine/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Wise,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/wise,https://boards-api.greenhouse.io/v1/boards/wise/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Revolut,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/revolut,https://boards-api.greenhouse.io/v1/boards/revolut/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Monzo,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/monzo,https://boards-api.greenhouse.io/v1/boards/monzo/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Starlingbank,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/starlingbank,https://boards-api.greenhouse.io/v1/boards/starlingbank/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Clearbank,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/clearbank,https://boards-api.greenhouse.io/v1/boards/clearbank/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Oaknorth,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/oaknorth,https://boards-api.greenhouse.io/v1/boards/oaknorth/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Tide,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/tide,https://boards-api.greenhouse.io/v1/boards/tide/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Chip,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/chip,https://boards-api.greenhouse.io/v1/boards/chip/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Kroo,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/kroo,https://boards-api.greenhouse.io/v1/boards/kroo/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Curve,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/curve,https://boards-api.greenhouse.io/v1/boards/curve/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Fundingcircle,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/fundingcircle,https://boards-api.greenhouse.io/v1/boards/fundingcircle/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Lendable,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/lendable,https://boards-api.greenhouse.io/v1/boards/lendable/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Lexisnexis,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/lexisnexis,https://boards-api.greenhouse.io/v1/boards/lexisnexis/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Dowjones,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/dowjones,https://boards-api.greenhouse.io/v1/boards/dowjones/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Saphyre,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/saphyre,https://boards-api.greenhouse.io/v1/boards/saphyre/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Alloy,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/alloy,https://boards-api.greenhouse.io/v1/boards/alloy/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Finch,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/finch,https://boards-api.greenhouse.io/v1/boards/finch/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Snyk,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/snyk,https://boards-api.greenhouse.io/v1/boards/snyk/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Clearscore,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/clearscore,https://boards-api.greenhouse.io/v1/boards/clearscore/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Starlingbank,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/starlingbank,https://boards-api.greenhouse.io/v1/boards/starlingbank/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Tide,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/tide,https://boards-api.greenhouse.io/v1/boards/tide/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Truelayer,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/truelayer,https://boards-api.greenhouse.io/v1/boards/truelayer/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Mambu,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/mambu,https://boards-api.greenhouse.io/v1/boards/mambu/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Thoughtmachine,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/thoughtmachine,https://boards-api.greenhouse.io/v1/boards/thoughtmachine/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Rapyd,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/rapyd,https://boards-api.greenhouse.io/v1/boards/rapyd/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Plaid,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/plaid,https://boards-api.greenhouse.io/v1/boards/plaid/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Marqeta,Fintech/Regtech (ATS),Greenhouse,https://boards.greenhouse.io/marqeta,https://boards-api.greenhouse.io/v1/boards/marqeta/jobs,,ATS feed from internal board list,internal_greenhouse_list
+Onfido,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/onfido,https://api.lever.co/v0/postings/onfido?mode=json,,ATS feed from internal board list,internal_lever_list
+Trulioo,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/trulioo,https://api.lever.co/v0/postings/trulioo?mode=json,,ATS feed from internal board list,internal_lever_list
+Sumsub,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/sumsub,https://api.lever.co/v0/postings/sumsub?mode=json,,ATS feed from internal board list,internal_lever_list
+Veriff,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/veriff,https://api.lever.co/v0/postings/veriff?mode=json,,ATS feed from internal board list,internal_lever_list
+Kyckr,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/kyckr,https://api.lever.co/v0/postings/kyckr?mode=json,,ATS feed from internal board list,internal_lever_list
+Clearscore,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/clearscore,https://api.lever.co/v0/postings/clearscore?mode=json,,ATS feed from internal board list,internal_lever_list
+Tide,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/tide,https://api.lever.co/v0/postings/tide?mode=json,,ATS feed from internal board list,internal_lever_list
+Monzo,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/monzo,https://api.lever.co/v0/postings/monzo?mode=json,,ATS feed from internal board list,internal_lever_list
+Airwallex,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/airwallex,https://api.lever.co/v0/postings/airwallex?mode=json,,ATS feed from internal board list,internal_lever_list
+Revolut,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/revolut,https://api.lever.co/v0/postings/revolut?mode=json,,ATS feed from internal board list,internal_lever_list
+Checkout,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/checkout,https://api.lever.co/v0/postings/checkout?mode=json,,ATS feed from internal board list,internal_lever_list
+Gocardless,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/gocardless,https://api.lever.co/v0/postings/gocardless?mode=json,,ATS feed from internal board list,internal_lever_list
+Wise,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/wise,https://api.lever.co/v0/postings/wise?mode=json,,ATS feed from internal board list,internal_lever_list
+Truelayer,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/truelayer,https://api.lever.co/v0/postings/truelayer?mode=json,,ATS feed from internal board list,internal_lever_list
+Modulr,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/modulr,https://api.lever.co/v0/postings/modulr?mode=json,,ATS feed from internal board list,internal_lever_list
+Curve,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/curve,https://api.lever.co/v0/postings/curve?mode=json,,ATS feed from internal board list,internal_lever_list
+Chip,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/chip,https://api.lever.co/v0/postings/chip?mode=json,,ATS feed from internal board list,internal_lever_list
+Kroo,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/kroo,https://api.lever.co/v0/postings/kroo?mode=json,,ATS feed from internal board list,internal_lever_list
+Zopa,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/zopa,https://api.lever.co/v0/postings/zopa?mode=json,,ATS feed from internal board list,internal_lever_list
+Oaknorth,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/oaknorth,https://api.lever.co/v0/postings/oaknorth?mode=json,,ATS feed from internal board list,internal_lever_list
+Plaid,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/plaid,https://api.lever.co/v0/postings/plaid?mode=json,,ATS feed from internal board list,internal_lever_list
+Marqeta,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/marqeta,https://api.lever.co/v0/postings/marqeta?mode=json,,ATS feed from internal board list,internal_lever_list
+Fundingcircle,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/fundingcircle,https://api.lever.co/v0/postings/fundingcircle?mode=json,,ATS feed from internal board list,internal_lever_list
+Lendable,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/lendable,https://api.lever.co/v0/postings/lendable?mode=json,,ATS feed from internal board list,internal_lever_list
+Smartpension,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/smartpension,https://api.lever.co/v0/postings/smartpension?mode=json,,ATS feed from internal board list,internal_lever_list
+Snyk,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/snyk,https://api.lever.co/v0/postings/snyk?mode=json,,ATS feed from internal board list,internal_lever_list
+Checkoutcom,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/checkoutcom,https://api.lever.co/v0/postings/checkoutcom?mode=json,,ATS feed from internal board list,internal_lever_list
+Worldremit,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/worldremit,https://api.lever.co/v0/postings/worldremit?mode=json,,ATS feed from internal board list,internal_lever_list
+Azimo,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/azimo,https://api.lever.co/v0/postings/azimo?mode=json,,ATS feed from internal board list,internal_lever_list
+Mambu,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/mambu,https://api.lever.co/v0/postings/mambu?mode=json,,ATS feed from internal board list,internal_lever_list
+Thoughtmachine,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/thoughtmachine,https://api.lever.co/v0/postings/thoughtmachine?mode=json,,ATS feed from internal board list,internal_lever_list
+Fenergo,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/fenergo,https://api.lever.co/v0/postings/fenergo?mode=json,,ATS feed from internal board list,internal_lever_list
+Quantexa,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/quantexa,https://api.lever.co/v0/postings/quantexa?mode=json,,ATS feed from internal board list,internal_lever_list
+Complyadvantage,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/complyadvantage,https://api.lever.co/v0/postings/complyadvantage?mode=json,,ATS feed from internal board list,internal_lever_list
+Ripjar,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/ripjar,https://api.lever.co/v0/postings/ripjar?mode=json,,ATS feed from internal board list,internal_lever_list
+Napier,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/napier,https://api.lever.co/v0/postings/napier?mode=json,,ATS feed from internal board list,internal_lever_list
+Symphonyai,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/symphonyai,https://api.lever.co/v0/postings/symphonyai?mode=json,,ATS feed from internal board list,internal_lever_list
+Lexisnexis,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/lexisnexis,https://api.lever.co/v0/postings/lexisnexis?mode=json,,ATS feed from internal board list,internal_lever_list
+Actimize,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/actimize,https://api.lever.co/v0/postings/actimize?mode=json,,ATS feed from internal board list,internal_lever_list
+Saphyre,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/saphyre,https://api.lever.co/v0/postings/saphyre?mode=json,,ATS feed from internal board list,internal_lever_list
+Encompass,Fintech/Regtech (ATS),Lever,https://jobs.lever.co/encompass,https://api.lever.co/v0/postings/encompass?mode=json,,ATS feed from internal board list,internal_lever_list
+Visa,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/Visa,https://api.smartrecruiters.com/v1/companies/Visa/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+Mastercard,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/Mastercard,https://api.smartrecruiters.com/v1/companies/Mastercard/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+StandardChartered,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/StandardChartered,https://api.smartrecruiters.com/v1/companies/StandardChartered/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+BNPParibas,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/BNPParibas,https://api.smartrecruiters.com/v1/companies/BNPParibas/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+Citi,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/Citi,https://api.smartrecruiters.com/v1/companies/Citi/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+UBS,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/UBS,https://api.smartrecruiters.com/v1/companies/UBS/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+DeutscheBank,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/DeutscheBank,https://api.smartrecruiters.com/v1/companies/DeutscheBank/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+LSEG,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/LSEG,https://api.smartrecruiters.com/v1/companies/LSEG/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+SAP,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/SAP,https://api.smartrecruiters.com/v1/companies/SAP/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+Oracle,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/Oracle,https://api.smartrecruiters.com/v1/companies/Oracle/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+FIS,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/FIS,https://api.smartrecruiters.com/v1/companies/FIS/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+Moody,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/Moody,https://api.smartrecruiters.com/v1/companies/Moody/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+S&PGlobal,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/S&PGlobal,https://api.smartrecruiters.com/v1/companies/S&PGlobal/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+NICE,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/NICE,https://api.smartrecruiters.com/v1/companies/NICE/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+DowJones,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/DowJones,https://api.smartrecruiters.com/v1/companies/DowJones/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+Barclays,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/Barclays,https://api.smartrecruiters.com/v1/companies/Barclays/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+HSBC,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/HSBC,https://api.smartrecruiters.com/v1/companies/HSBC/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+Lloyds,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/Lloyds,https://api.smartrecruiters.com/v1/companies/Lloyds/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+NatWest,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/NatWest,https://api.smartrecruiters.com/v1/companies/NatWest/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+Santander,Fintech/Regtech (ATS),SmartRecruiters,https://jobs.smartrecruiters.com/Santander,https://api.smartrecruiters.com/v1/companies/Santander/postings,,ATS feed from internal company list,internal_smartrecruiters_list
+Ramp,Fintech/Regtech (ATS),Ashby,https://jobs.ashbyhq.com/ramp,https://api.ashbyhq.com/posting-api/job-board/ramp,,ATS feed from internal board list,internal_ashby_list
+Brex,Fintech/Regtech (ATS),Ashby,https://jobs.ashbyhq.com/brex,https://api.ashbyhq.com/posting-api/job-board/brex,,ATS feed from internal board list,internal_ashby_list
+Mercury,Fintech/Regtech (ATS),Ashby,https://jobs.ashbyhq.com/mercury,https://api.ashbyhq.com/posting-api/job-board/mercury,,ATS feed from internal board list,internal_ashby_list
+Airwallex,Fintech/Regtech (ATS),Ashby,https://jobs.ashbyhq.com/airwallex,https://api.ashbyhq.com/posting-api/job-board/airwallex,,ATS feed from internal board list,internal_ashby_list
+Gocardless,Fintech/Regtech (ATS),Ashby,https://jobs.ashbyhq.com/gocardless,https://api.ashbyhq.com/posting-api/job-board/gocardless,,ATS feed from internal board list,internal_ashby_list
+Stripe,Fintech/Regtech (ATS),Ashby,https://jobs.ashbyhq.com/stripe,https://api.ashbyhq.com/posting-api/job-board/stripe,,ATS feed from internal board list,internal_ashby_list
+Checkout,Fintech/Regtech (ATS),Ashby,https://jobs.ashbyhq.com/checkout,https://api.ashbyhq.com/posting-api/job-board/checkout,,ATS feed from internal board list,internal_ashby_list
+Klarna,Fintech/Regtech (ATS),Ashby,https://jobs.ashbyhq.com/klarna,https://api.ashbyhq.com/posting-api/job-board/klarna,,ATS feed from internal board list,internal_ashby_list
+Wise,Fintech/Regtech (ATS),Ashby,https://jobs.ashbyhq.com/wise,https://api.ashbyhq.com/posting-api/job-board/wise,,ATS feed from internal board list,internal_ashby_list
+Revolut,Fintech/Regtech (ATS),Ashby,https://jobs.ashbyhq.com/revolut,https://api.ashbyhq.com/posting-api/job-board/revolut,,ATS feed from internal board list,internal_ashby_list
+Plaid,Fintech/Regtech (ATS),Ashby,https://jobs.ashbyhq.com/plaid,https://api.ashbyhq.com/posting-api/job-board/plaid,,ATS feed from internal board list,internal_ashby_list
+Marqeta,Fintech/Regtech (ATS),Ashby,https://jobs.ashbyhq.com/marqeta,https://api.ashbyhq.com/posting-api/job-board/marqeta,,ATS feed from internal board list,internal_ashby_list
+Truelayer,Fintech/Regtech (ATS),Ashby,https://jobs.ashbyhq.com/truelayer,https://api.ashbyhq.com/posting-api/job-board/truelayer,,ATS feed from internal board list,internal_ashby_list
+Mambu,Fintech/Regtech (ATS),Ashby,https://jobs.ashbyhq.com/mambu,https://api.ashbyhq.com/posting-api/job-board/mambu,,ATS feed from internal board list,internal_ashby_list
+Thoughtmachine,Fintech/Regtech (ATS),Ashby,https://jobs.ashbyhq.com/thoughtmachine,https://api.ashbyhq.com/posting-api/job-board/thoughtmachine,,ATS feed from internal board list,internal_ashby_list
