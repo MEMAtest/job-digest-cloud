@@ -12,6 +12,7 @@ import json
 import os
 import re
 import time
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
@@ -348,6 +349,8 @@ ROLE_TITLE_REQUIREMENTS = {
     "head",
     "director",
     "specialist",
+    "analyst",
+    "architect",
     "strategy",
     "operations",
     "management",
@@ -1095,18 +1098,36 @@ def build_preference_match(text: str, company: str, location: str) -> str:
 
 def is_relevant_title(title: str) -> bool:
     title_l = title.lower()
-    if "product" not in title_l:
-        return False
     if any(term in title_l for term in EXCLUDE_TITLE_TERMS):
         return False
-    if not any(req in title_l for req in ROLE_TITLE_REQUIREMENTS):
+    has_role_term = any(req in title_l for req in ROLE_TITLE_REQUIREMENTS)
+    if not has_role_term:
         return False
-    return True
+    if "product" in title_l:
+        return True
+    if any(term in title_l for term in DOMAIN_TERMS):
+        return True
+    if "platform" in title_l:
+        return True
+    return False
 
 
 def is_relevant_location(location: str) -> bool:
     loc_l = location.lower()
-    return any(term in loc_l for term in ["london", "united kingdom", "remote", "hybrid"])
+    return any(
+        term in loc_l
+        for term in [
+            "london",
+            "greater london",
+            "united kingdom",
+            "england",
+            "uk",
+            "gb",
+            "great britain",
+            "remote",
+            "hybrid",
+        ]
+    )
 
 
 def parse_gemini_payload(text: str) -> Optional[Dict[str, object]]:
@@ -1351,9 +1372,13 @@ def run_smoke_test() -> None:
         count = 0
         status = 1
         if source["type"] == "rss":
+            entries = []
             if feedparser is not None:
                 feed = feedparser.parse(source["url"])
-                count = len(feed.entries)
+                entries = list(feed.entries)
+            if not entries:
+                entries = fetch_rss_entries(session, source["url"])
+            count = len(entries)
         elif source["type"] == "api":
             if source["name"] == "Remotive":
                 jobs = remotive_search(session)
@@ -1772,23 +1797,110 @@ def parse_entry_date(entry: Dict[str, str]) -> str:
     if hasattr(entry, "updated_parsed") and entry.updated_parsed:
         dt = datetime(*entry.updated_parsed[:6], tzinfo=timezone.utc)
         return dt.isoformat()
+    if isinstance(entry, dict):
+        for key in ("published", "pubDate", "updated", "date", "published_at"):
+            raw = entry.get(key)
+            if not raw:
+                continue
+            try:
+                dt = parsedate_to_datetime(raw)
+            except (TypeError, ValueError):
+                continue
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            return dt.isoformat()
     return ""
 
 
-def rss_search(url: str, source_name: str) -> List[Dict[str, str]]:
-    if feedparser is None:
+def parse_rss_fallback(text: str) -> List[Dict[str, str]]:
+    entries: List[Dict[str, str]] = []
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError:
+        return entries
+
+    def find_text(node: ET.Element, tags: List[str]) -> str:
+        for tag in tags:
+            found = node.find(tag)
+            if found is not None and found.text:
+                return found.text.strip()
+        return ""
+
+    for item in root.findall(".//item"):
+        title = find_text(item, ["title"])
+        link = find_text(item, ["link"])
+        summary = find_text(item, ["description", "summary"])
+        published = find_text(item, ["pubDate", "published", "updated"])
+        entries.append(
+            {
+                "title": title,
+                "link": link,
+                "summary": summary,
+                "published": published,
+            }
+        )
+
+    if entries:
+        return entries
+
+    atom_ns = "{http://www.w3.org/2005/Atom}"
+    for entry in root.findall(f".//{atom_ns}entry") + root.findall(".//entry"):
+        title = find_text(entry, [f"{atom_ns}title", "title"])
+        summary = find_text(entry, [f"{atom_ns}summary", "summary", f"{atom_ns}content", "content"])
+        published = find_text(entry, [f"{atom_ns}updated", "updated", f"{atom_ns}published", "published"])
+        link = ""
+        for link_el in entry.findall(f"{atom_ns}link") + entry.findall("link"):
+            href = link_el.attrib.get("href")
+            if href:
+                link = href
+                break
+            if link_el.text:
+                link = link_el.text.strip()
+                break
+        entries.append(
+            {
+                "title": title,
+                "link": link,
+                "summary": summary,
+                "published": published,
+            }
+        )
+    return entries
+
+
+def fetch_rss_entries(session: requests.Session, url: str) -> List[Dict[str, str]]:
+    try:
+        resp = session.get(url, timeout=30)
+    except requests.RequestException:
         return []
-    feed = feedparser.parse(url)
+    if resp.status_code != 200:
+        return []
+    text = resp.text
+    entries: List[Dict[str, str]] = []
+    if feedparser is not None:
+        feed = feedparser.parse(text)
+        entries = list(feed.entries)
+    if not entries:
+        entries = parse_rss_fallback(text)
+    return entries
+
+
+def rss_search(session: requests.Session, url: str, source_name: str) -> List[Dict[str, str]]:
+    entries = fetch_rss_entries(session, url)
     jobs: List[Dict[str, str]] = []
-    for entry in feed.entries:
-        title = entry.get("title", "")
+    for entry in entries:
+        title = entry.get("title", "") if isinstance(entry, dict) else ""
         if not title:
             continue
-        link = entry.get("link", "")
-        summary = normalize_text(entry.get("summary", "")) if entry.get("summary") else ""
+        link = entry.get("link", "") if isinstance(entry, dict) else ""
+        summary = ""
+        if isinstance(entry, dict) and entry.get("summary"):
+            summary = normalize_text(entry.get("summary", ""))
         posted_date = parse_entry_date(entry)
 
-        company = entry.get("author", "")
+        company = entry.get("author", "") if isinstance(entry, dict) else ""
         if " at " in title.lower() and not company:
             parts = title.split(" at ")
             if len(parts) == 2:
@@ -2585,33 +2697,44 @@ def indeed_search(session: requests.Session) -> List[Dict[str, str]]:
     if not base_url:
         return jobs
 
-    if feedparser is not None:
-        rss_jobs: List[Dict[str, str]] = []
-        for keyword in BOARD_KEYWORDS[:2]:
-            rss_url = f"{base_url}/rss?q={quote_plus(keyword)}&l=London&sort=date"
+    rss_jobs: List[Dict[str, str]] = []
+    for keyword in BOARD_KEYWORDS[:2]:
+        rss_url = f"{base_url}/rss?q={quote_plus(keyword)}&l=London&sort=date"
+        entries = []
+        if feedparser is not None:
             feed = feedparser.parse(rss_url)
-            for entry in feed.entries:
+            entries = list(feed.entries)
+        if not entries:
+            entries = fetch_rss_entries(session, rss_url)
+        for entry in entries:
+            if isinstance(entry, dict):
                 title = entry.get("title", "")
-                if not title:
-                    continue
                 link = entry.get("link", "")
                 summary = normalize_text(entry.get("summary", "")) if entry.get("summary") else ""
-                posted_date = parse_entry_date(entry)
-                rss_jobs.append(
-                    {
-                        "title": title,
-                        "company": entry.get("author", "") or "Indeed",
-                        "location": "London",
-                        "link": clean_link(link),
-                        "posted_text": "",
-                        "posted_date": posted_date,
-                        "summary": summary,
-                        "source": "IndeedUK",
-                    }
-                )
-            time.sleep(0.2)
-        if rss_jobs:
-            return rss_jobs
+                company = entry.get("author", "") or "Indeed"
+            else:
+                title = ""
+                link = ""
+                summary = ""
+                company = "Indeed"
+            if not title:
+                continue
+            posted_date = parse_entry_date(entry)
+            rss_jobs.append(
+                {
+                    "title": title,
+                    "company": company,
+                    "location": "London",
+                    "link": clean_link(link),
+                    "posted_text": "",
+                    "posted_date": posted_date,
+                    "summary": summary,
+                    "source": "IndeedUK",
+                }
+            )
+        time.sleep(0.2)
+    if rss_jobs:
+        return rss_jobs
 
     job_map: Dict[str, Dict[str, str]] = {}
     for keyword in BOARD_KEYWORDS[:3]:
@@ -2962,7 +3085,7 @@ def job_board_search(session: requests.Session) -> List[Dict[str, str]]:
     jobs: List[Dict[str, str]] = []
     for source in JOB_BOARD_SOURCES:
         if source["type"] == "rss":
-            jobs.extend(rss_search(source["url"], source["name"]))
+            jobs.extend(rss_search(session, source["url"], source["name"]))
         elif source["type"] == "api":
             if source["name"] == "Remotive":
                 jobs.extend(remotive_search(session))
