@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import csv
 import hashlib
 import json
 import os
@@ -104,10 +105,12 @@ SEEN_CACHE_PATH = Path(
 )
 SEEN_CACHE_DAYS = int(os.getenv("JOB_DIGEST_SEEN_CACHE_DAYS", "14"))
 RUN_AT = os.getenv("JOB_DIGEST_RUN_AT", "")
+RUN_ATS = [t.strip() for t in os.getenv("JOB_DIGEST_RUN_ATS", "").split(",") if t.strip()]
 RUN_WINDOW_MINUTES = int(os.getenv("JOB_DIGEST_RUN_WINDOW_MINUTES", "20"))
 RUN_STATE_PATH = Path(
     os.getenv("JOB_DIGEST_RUN_STATE", str(DIGEST_DIR / "run_state.json"))
 )
+FORCE_RUN = os.getenv("JOB_DIGEST_FORCE_RUN", "false").lower() == "true"
 
 EMAIL_ENABLED = os.getenv("JOB_DIGEST_EMAIL_ENABLED", "true").lower() == "true"
 SMTP_HOST = os.getenv("SMTP_HOST", "")
@@ -129,6 +132,10 @@ JOB_DIGEST_PROFILE = os.getenv(
     "Global product/process owner with KYC, onboarding, screening, financial crime, and"
     " compliance transformation experience across banks and RegTech platforms.",
 )
+JOB_DIGEST_DOCX_PATH = os.getenv(
+    "JOB_DIGEST_DOCX_PATH",
+    "/Users/adeomosanya/Downloads/Ademola_Enhanced_Full_Guide_v2.2_NoEvidence.docx",
+)
 
 ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID", "") or os.getenv("JOB_DIGEST_ADZUNA_APP_ID", "")
 ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY", "") or os.getenv("JOB_DIGEST_ADZUNA_APP_KEY", "")
@@ -144,6 +151,7 @@ WORKDAY_SITES_FILE = Path(os.getenv("JOB_DIGEST_WORKDAY_FILE", str(BASE_DIR / "w
 COMPANY_TARGETS_PATH = Path(
     os.getenv("JOB_DIGEST_COMPANY_TARGETS", str(BASE_DIR / "company_targets_uk.txt"))
 )
+UK_FEEDS_PATH = Path(os.getenv("JOB_DIGEST_UK_FEEDS", str(BASE_DIR / "uk_firm_feeds.csv")))
 
 FIREBASE_SERVICE_ACCOUNT_JSON = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "")
 FIREBASE_SERVICE_ACCOUNT_B64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64", "")
@@ -780,6 +788,46 @@ def dedupe_keep_order(items: List[str]) -> List[str]:
     return deduped
 
 
+def load_uk_feed_targets(path: Path) -> Dict[str, List[str]]:
+    targets: Dict[str, List[str]] = {
+        "greenhouse": [],
+        "lever": [],
+        "smartrecruiters": [],
+        "ashby": [],
+        "workday": [],
+    }
+    if not path.exists():
+        return targets
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                platform = (row.get("platform") or "").strip().lower()
+                feed_url = (row.get("feed_url") or "").strip()
+                workday_entry = (row.get("workday_entry") or "").strip()
+                if platform == "greenhouse" and "/boards/" in feed_url:
+                    board = feed_url.split("/boards/")[1].split("/")[0]
+                    if board:
+                        targets["greenhouse"].append(board)
+                elif platform == "lever" and "/postings/" in feed_url:
+                    company = feed_url.split("/postings/")[1].split("?")[0]
+                    if company:
+                        targets["lever"].append(company)
+                elif platform == "smartrecruiters" and "/companies/" in feed_url:
+                    company = feed_url.split("/companies/")[1].split("/")[0]
+                    if company:
+                        targets["smartrecruiters"].append(company)
+                elif platform == "ashby" and "/job-board/" in feed_url:
+                    board = feed_url.split("/job-board/")[1].split("/")[0]
+                    if board:
+                        targets["ashby"].append(board)
+                elif platform == "workday" and workday_entry:
+                    targets["workday"].append(workday_entry)
+    except OSError:
+        return targets
+    return targets
+
+
 def load_target_list(path: Path) -> List[str]:
     if not path.exists():
         return []
@@ -808,6 +856,24 @@ SEARCH_COMPANIES = dedupe_keep_order(SEARCH_COMPANIES)
 workday_file_entries = load_target_list(WORKDAY_SITES_FILE)
 if workday_file_entries:
     WORKDAY_SITES.extend(workday_file_entries)
+WORKDAY_SITES = dedupe_keep_order(WORKDAY_SITES)
+
+uk_feed_targets = load_uk_feed_targets(UK_FEEDS_PATH)
+if uk_feed_targets["greenhouse"]:
+    GREENHOUSE_BOARDS.extend(uk_feed_targets["greenhouse"])
+if uk_feed_targets["lever"]:
+    LEVER_BOARDS.extend(uk_feed_targets["lever"])
+if uk_feed_targets["smartrecruiters"]:
+    SMARTRECRUITERS_COMPANIES.extend(uk_feed_targets["smartrecruiters"])
+if uk_feed_targets["ashby"]:
+    ASHBY_BOARDS.extend(uk_feed_targets["ashby"])
+if uk_feed_targets["workday"]:
+    WORKDAY_SITES.extend(uk_feed_targets["workday"])
+
+GREENHOUSE_BOARDS = dedupe_keep_order(GREENHOUSE_BOARDS)
+LEVER_BOARDS = dedupe_keep_order(LEVER_BOARDS)
+SMARTRECRUITERS_COMPANIES = dedupe_keep_order(SMARTRECRUITERS_COMPANIES)
+ASHBY_BOARDS = dedupe_keep_order(ASHBY_BOARDS)
 WORKDAY_SITES = dedupe_keep_order(WORKDAY_SITES)
 
 
@@ -946,7 +1012,36 @@ def load_cv_text(path_str: str) -> str:
     return "\n".join(text_chunks).strip()
 
 
-JOB_DIGEST_PROFILE_TEXT = load_cv_text(JOB_DIGEST_CV_PATH) or JOB_DIGEST_PROFILE
+def load_docx_text(path_str: str) -> str:
+    if not path_str:
+        return ""
+    path = Path(path_str)
+    if not path.exists():
+        return ""
+    try:
+        import zipfile
+    except Exception:
+        return ""
+    try:
+        with zipfile.ZipFile(path) as zf:
+            if "word/document.xml" not in zf.namelist():
+                return ""
+            xml = zf.read("word/document.xml").decode("utf-8", errors="ignore")
+    except Exception:
+        return ""
+    text = re.sub(r"<[^>]+>", " ", xml)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+JOB_DIGEST_PROFILE_TEXT = "\n\n".join(
+    part
+    for part in [
+        load_cv_text(JOB_DIGEST_CV_PATH),
+        load_docx_text(JOB_DIGEST_DOCX_PATH),
+        JOB_DIGEST_PROFILE,
+    ]
+    if part
+).strip()
 
 
 def normalize_text(text: str) -> str:
@@ -1046,38 +1141,50 @@ def save_run_state(path: Path, state: Dict[str, str]) -> None:
         pass
 
 
-def should_run_now() -> bool:
-    if not RUN_AT:
+def _parse_run_time(value: str) -> Optional[Tuple[int, int]]:
+    try:
+        hour_str, minute_str = value.split(":")
+        return int(hour_str), int(minute_str)
+    except ValueError:
+        return None
+
+
+def should_run_now(force: bool = False) -> bool:
+    if force or FORCE_RUN:
+        return True
+    run_times = [t for t in RUN_ATS if _parse_run_time(t)] or ([RUN_AT] if RUN_AT else [])
+    if not run_times:
         return True
     if ZoneInfo is None:
         return True
 
-    try:
-        hour_str, minute_str = RUN_AT.split(":")
-        target_hour = int(hour_str)
-        target_minute = int(minute_str)
-    except ValueError:
-        return True
-
     tz = ZoneInfo(TZ_NAME)
     now_local = datetime.now(tz)
-    target = now_local.replace(
-        hour=target_hour,
-        minute=target_minute,
-        second=0,
-        microsecond=0,
-    )
-
-    delta_minutes = abs((now_local - target).total_seconds()) / 60.0
-    if delta_minutes > RUN_WINDOW_MINUTES:
-        return False
-
     state = load_run_state(RUN_STATE_PATH)
-    last_run = state.get("last_run_date")
-    if last_run == now_local.strftime("%Y-%m-%d"):
-        return False
+    last_slots = state.get("last_run_slots", [])
+    if not isinstance(last_slots, list):
+        last_slots = []
 
-    return True
+    for run_time in run_times:
+        parsed = _parse_run_time(run_time)
+        if not parsed:
+            continue
+        target_hour, target_minute = parsed
+        target = now_local.replace(
+            hour=target_hour,
+            minute=target_minute,
+            second=0,
+            microsecond=0,
+        )
+        delta_minutes = abs((now_local - target).total_seconds()) / 60.0
+        if delta_minutes > RUN_WINDOW_MINUTES:
+            continue
+        slot_key = f\"{now_local.strftime('%Y-%m-%d')}-{target_hour:02d}:{target_minute:02d}\"
+        if slot_key in last_slots:
+            continue
+        return True
+
+    return False
 
 
 def parse_posted_within_window(posted_text: str, posted_date: str, window_hours: int) -> bool:
@@ -1415,6 +1522,69 @@ def write_records_to_firestore(records: List[JobRecord]) -> None:
             client.collection(FIREBASE_COLLECTION).document(doc_id).set(data, merge=True)
         except Exception:
             continue
+
+
+def write_source_stats(records: List[JobRecord]) -> None:
+    client = init_firestore_client()
+    if client is None:
+        return
+
+    counts: Dict[str, int] = {}
+    for record in records:
+        counts[record.source] = counts.get(record.source, 0) + 1
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    payload = {
+        "date": today,
+        "total": sum(counts.values()),
+        "counts": counts,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        client.collection("job_stats").document(today).set(payload, merge=True)
+    except Exception:
+        return
+
+
+def write_role_suggestions() -> None:
+    client = init_firestore_client()
+    if client is None:
+        return
+    if not GEMINI_API_KEY or genai is None:
+        return
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel(GEMINI_MODEL)
+    except Exception:
+        return
+
+    prompt = (
+        "You are a UK career strategist. Based on the candidate profile, suggest 6-10 adjacent roles "
+        "they could be suitable for beyond exact Product Manager titles. Return JSON ONLY with keys: "
+        "roles (array of strings) and rationale (string). Keep roles UK market relevant.\n\n"
+        f"Candidate profile: {JOB_DIGEST_PROFILE_TEXT}\n"
+    )
+    try:
+        response = model.generate_content(prompt)
+    except Exception:
+        return
+    data = parse_gemini_payload(getattr(response, \"text\", \"\") or \"\") or {}
+    roles = data.get(\"roles\", [])
+    if isinstance(roles, str):
+        roles = [roles]
+    roles = [str(r).strip() for r in roles if str(r).strip()]
+    rationale = data.get(\"rationale\", \"\")
+    today = datetime.now(timezone.utc).strftime(\"%Y-%m-%d\")
+    payload = {
+        \"date\": today,
+        \"roles\": roles,
+        \"rationale\": rationale,
+        \"updated_at\": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        client.collection(\"role_suggestions\").document(today).set(payload, merge=True)
+    except Exception:
+        return
 
 
 def run_smoke_test() -> None:
@@ -3691,6 +3861,8 @@ def main() -> None:
 
     # Optional Firebase persistence
     write_records_to_firestore(records)
+    write_source_stats(records)
+    write_role_suggestions()
 
     # Write outputs
     today = datetime.now().strftime("%Y-%m-%d")
@@ -3776,9 +3948,23 @@ def main() -> None:
             if record.link:
                 seen_cache[record.link] = now_utc().isoformat()
         save_seen_cache(SEEN_CACHE_PATH, seen_cache)
-        if RUN_AT:
+        if RUN_AT or RUN_ATS:
             state = load_run_state(RUN_STATE_PATH)
-            state["last_run_date"] = datetime.now().strftime("%Y-%m-%d")
+            now_local = datetime.now(ZoneInfo(TZ_NAME)) if ZoneInfo else datetime.now()
+            run_times = [t for t in RUN_ATS if _parse_run_time(t)] or ([RUN_AT] if RUN_AT else [])
+            last_slots = state.get("last_run_slots", [])
+            if not isinstance(last_slots, list):
+                last_slots = []
+            for run_time in run_times or ["manual"]:
+                parsed = _parse_run_time(run_time) if run_time != "manual" else None
+                if parsed:
+                    hour, minute = parsed
+                    slot_key = f"{now_local.strftime('%Y-%m-%d')}-{hour:02d}:{minute:02d}"
+                else:
+                    slot_key = f"{now_local.strftime('%Y-%m-%d')}-manual"
+                if slot_key not in last_slots:
+                    last_slots.append(slot_key)
+            state["last_run_slots"] = last_slots[-50:]
             save_run_state(RUN_STATE_PATH, state)
 
     print(f"Digest generated: {out_xlsx}")
@@ -3788,9 +3974,13 @@ def main() -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Daily job digest runner")
     parser.add_argument("--smoke-test", action="store_true", help="Run a source connectivity smoke test")
+    parser.add_argument("--force", action="store_true", help="Force a run outside schedule")
     args = parser.parse_args()
 
     if args.smoke_test:
         run_smoke_test()
     else:
+        if not should_run_now(force=args.force):
+            print("Skipping run: outside scheduled run window or already sent for this slot.")
+            raise SystemExit(0)
         main()
