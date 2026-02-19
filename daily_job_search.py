@@ -81,6 +81,10 @@ class JobRecord:
     match_notes: str = ""
     company_insights: str = ""
     cover_letter: str = ""
+    key_talking_points: List[str] = field(default_factory=list)
+    star_stories: List[str] = field(default_factory=list)
+    quick_pitch: str = ""
+    interview_focus: str = ""
     prep_questions: List[str] = field(default_factory=list)
     apply_tips: str = ""
 
@@ -1394,7 +1398,8 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
             "prep_questions (array of 3-5 strings), apply_tips (string), role_summary (string), "
             "tailored_summary (string), tailored_cv_bullets (array of 4-6 bullet strings), "
             "key_requirements (array of strings), match_notes (string), company_insights (string), "
-            "cover_letter (string).\n\n"
+            "cover_letter (string), key_talking_points (array of strings), star_stories (array of strings), "
+            "quick_pitch (string), interview_focus (string).\n\n"
             "ATS rules: plain text, no tables, no columns, no icons, no bullet symbols other than '- '. "
             "Bullets must be short, action-led, and include metrics if possible. "
             "If the job text includes Qualifications/Requirements, extract 3-6 key requirements into "
@@ -1445,6 +1450,18 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
         record.match_notes = data.get("match_notes", record.match_notes) or record.match_notes
         record.company_insights = data.get("company_insights", record.company_insights) or record.company_insights
         record.cover_letter = data.get("cover_letter", record.cover_letter) or record.cover_letter
+        talking = data.get("key_talking_points", record.key_talking_points)
+        if isinstance(talking, str):
+            talking = [talking]
+        if isinstance(talking, list):
+            record.key_talking_points = [str(t).strip() for t in talking if str(t).strip()]
+        stories = data.get("star_stories", record.star_stories)
+        if isinstance(stories, str):
+            stories = [stories]
+        if isinstance(stories, list):
+            record.star_stories = [str(s).strip() for s in stories if str(s).strip()]
+        record.quick_pitch = data.get("quick_pitch", record.quick_pitch) or record.quick_pitch
+        record.interview_focus = data.get("interview_focus", record.interview_focus) or record.interview_focus
 
         time.sleep(0.25)
 
@@ -1511,6 +1528,10 @@ def write_records_to_firestore(records: List[JobRecord]) -> None:
             "match_notes": record.match_notes,
             "company_insights": record.company_insights,
             "cover_letter": record.cover_letter,
+            "key_talking_points": record.key_talking_points,
+            "star_stories": record.star_stories,
+            "quick_pitch": record.quick_pitch,
+            "interview_focus": record.interview_focus,
         }
         for key, value in optional_fields.items():
             if isinstance(value, list):
@@ -1568,21 +1589,74 @@ def write_role_suggestions() -> None:
         response = model.generate_content(prompt)
     except Exception:
         return
-    data = parse_gemini_payload(getattr(response, \"text\", \"\") or \"\") or {}
-    roles = data.get(\"roles\", [])
+    data = parse_gemini_payload(getattr(response, "text", "") or "") or {}
+    roles = data.get("roles", [])
     if isinstance(roles, str):
         roles = [roles]
     roles = [str(r).strip() for r in roles if str(r).strip()]
-    rationale = data.get(\"rationale\", \"\")
-    today = datetime.now(timezone.utc).strftime(\"%Y-%m-%d\")
+    rationale = data.get("rationale", "")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     payload = {
-        \"date\": today,
-        \"roles\": roles,
-        \"rationale\": rationale,
-        \"updated_at\": datetime.now(timezone.utc).isoformat(),
+        "date": today,
+        "roles": roles,
+        "rationale": rationale,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
-        client.collection(\"role_suggestions\").document(today).set(payload, merge=True)
+        client.collection("role_suggestions").document(today).set(payload, merge=True)
+    except Exception:
+        return
+
+
+def write_candidate_prep() -> None:
+    client = init_firestore_client()
+    if client is None:
+        return
+    if not GEMINI_API_KEY or genai is None:
+        return
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel(GEMINI_MODEL)
+    except Exception:
+        return
+
+    prompt = (
+        "You are a UK executive interview coach. Create a concise interview prep sheet for Ade. "
+        "Return JSON ONLY with keys: key_stats (array of strings), key_talking_points (array of strings), "
+        "star_stories (array of 6-8 STAR summaries), and quick_pitch (string, 60-90 words). "
+        "Keep it clear, confident, and memorable.\n\n"
+        f"Candidate profile: {JOB_DIGEST_PROFILE_TEXT}\n"
+    )
+    try:
+        response = model.generate_content(prompt)
+    except Exception:
+        return
+    data = parse_gemini_payload(getattr(response, "text", "") or "") or {}
+    key_stats = data.get("key_stats", [])
+    if isinstance(key_stats, str):
+        key_stats = [key_stats]
+    key_stats = [str(s).strip() for s in key_stats if str(s).strip()]
+    key_points = data.get("key_talking_points", [])
+    if isinstance(key_points, str):
+        key_points = [key_points]
+    key_points = [str(s).strip() for s in key_points if str(s).strip()]
+    stories = data.get("star_stories", [])
+    if isinstance(stories, str):
+        stories = [stories]
+    stories = [str(s).strip() for s in stories if str(s).strip()]
+    quick_pitch = data.get("quick_pitch", "")
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    payload = {
+        "date": today,
+        "key_stats": key_stats,
+        "key_talking_points": key_points,
+        "star_stories": stories,
+        "quick_pitch": quick_pitch,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        client.collection("candidate_prep").document(today).set(payload, merge=True)
     except Exception:
         return
 
@@ -3863,6 +3937,7 @@ def main() -> None:
     write_records_to_firestore(records)
     write_source_stats(records)
     write_role_suggestions()
+    write_candidate_prep()
 
     # Write outputs
     today = datetime.now().strftime("%Y-%m-%d")
@@ -3888,6 +3963,10 @@ def main() -> None:
             "Match_Notes": r.match_notes,
             "Company_Insights": r.company_insights,
             "Cover_Letter": r.cover_letter,
+            "Key_Talking_Points": " | ".join(r.key_talking_points),
+            "STAR_Stories": " | ".join(r.star_stories),
+            "Quick_Pitch": r.quick_pitch,
+            "Interview_Focus": r.interview_focus,
             "Prep_Questions": " | ".join(r.prep_questions),
             "Apply_Tips": r.apply_tips,
             "Notes": r.notes,
