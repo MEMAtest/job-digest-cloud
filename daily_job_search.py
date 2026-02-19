@@ -37,6 +37,16 @@ except Exception:  # noqa: BLE001
     feedparser = None
 
 try:
+    import pdfplumber
+except Exception:  # noqa: BLE001
+    pdfplumber = None
+
+try:
+    from pypdf import PdfReader
+except Exception:  # noqa: BLE001
+    PdfReader = None
+
+try:
     import google.generativeai as genai
 except Exception:  # noqa: BLE001
     genai = None
@@ -63,6 +73,13 @@ class JobRecord:
     why_fit: str
     cv_gap: str
     notes: str
+    role_summary: str = ""
+    tailored_summary: str = ""
+    tailored_cv_bullets: List[str] = field(default_factory=list)
+    key_requirements: List[str] = field(default_factory=list)
+    match_notes: str = ""
+    company_insights: str = ""
+    cover_letter: str = ""
     prep_questions: List[str] = field(default_factory=list)
     apply_tips: str = ""
 
@@ -103,6 +120,10 @@ TO_EMAIL = os.getenv("TO_EMAIL", "ademolaomosanya@gmail.com")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "") or os.getenv("JOB_DIGEST_GEMINI_KEY", "")
 GEMINI_MODEL = os.getenv("JOB_DIGEST_GEMINI_MODEL", "gemini-1.5-flash")
 GEMINI_MAX_JOBS = int(os.getenv("JOB_DIGEST_GEMINI_MAX_JOBS", "20"))
+JOB_DIGEST_CV_PATH = os.getenv(
+    "JOB_DIGEST_CV_PATH",
+    "/Users/adeomosanya/Downloads/AdemolaOmosanya_2026.pdf",
+)
 JOB_DIGEST_PROFILE = os.getenv(
     "JOB_DIGEST_PROFILE",
     "Global product/process owner with KYC, onboarding, screening, financial crime, and"
@@ -852,6 +873,45 @@ def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def load_cv_text(path_str: str) -> str:
+    if not path_str:
+        return ""
+    path = Path(path_str)
+    if not path.exists():
+        return ""
+
+    if path.suffix.lower() != ".pdf":
+        try:
+            return path.read_text(encoding="utf-8").strip()
+        except (OSError, UnicodeDecodeError):
+            return ""
+
+    text_chunks: List[str] = []
+    if pdfplumber is not None:
+        try:
+            with pdfplumber.open(path) as pdf:
+                for page in pdf.pages:
+                    page_text = page.extract_text() or ""
+                    if page_text:
+                        text_chunks.append(page_text)
+        except Exception:
+            text_chunks = []
+    elif PdfReader is not None:
+        try:
+            reader = PdfReader(str(path))
+            for page in reader.pages:
+                page_text = page.extract_text() or ""
+                if page_text:
+                    text_chunks.append(page_text)
+        except Exception:
+            text_chunks = []
+
+    return "\n".join(text_chunks).strip()
+
+
+JOB_DIGEST_PROFILE_TEXT = load_cv_text(JOB_DIGEST_CV_PATH) or JOB_DIGEST_PROFILE
+
+
 def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", text.strip())
 
@@ -1038,6 +1098,22 @@ def score_fit(text: str, company: str) -> Tuple[int, List[str], List[str]]:
         score += min(20, 4 * len(matched_domain))
     if matched_extra:
         score += min(10, 2 * len(matched_extra))
+    if "product" in text_l:
+        score += 5
+    if any(
+        term in text_l
+        for term in (
+            "product manager",
+            "product owner",
+            "product lead",
+            "product director",
+            "product operations",
+            "product management",
+        )
+    ):
+        score += 3
+    if any(term in text_l for term in ("process", "operational", "operations", "transformation")):
+        score += 2
     company_l = company.lower()
     if any(v in company_l for v in VENDOR_COMPANIES):
         score += 12
@@ -1162,18 +1238,23 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
     limit = min(GEMINI_MAX_JOBS, len(records))
     for record in records[:limit]:
         prompt = (
-            "You are a senior UK fintech product recruiter. Given the candidate profile and job summary, "
-            "score fit 0-100 and produce concise notes. Return JSON ONLY with keys: "
-            "fit_score (int), why_fit (string), cv_gap (string), prep_questions (array of 3-5 strings), "
-            "apply_tips (string).\n\n"
-            f"Candidate profile: {JOB_DIGEST_PROFILE}\n"
+            "You are a senior UK fintech product recruiter and ATS optimisation specialist. "
+            "Given the candidate profile and job summary, score fit 0-100 and produce ATS-ready outputs. "
+            "Return JSON ONLY with keys: fit_score (int), why_fit (string), cv_gap (string), "
+            "prep_questions (array of 3-5 strings), apply_tips (string), role_summary (string), "
+            "tailored_summary (string), tailored_cv_bullets (array of 4-6 bullet strings), "
+            "key_requirements (array of strings), match_notes (string), company_insights (string), "
+            "cover_letter (string).\n\n"
+            "ATS rules: plain text, no tables, no columns, no icons, no bullet symbols other than '- '. "
+            "Bullets must be short, action-led, and include metrics if possible.\n\n"
+            f"Candidate profile: {JOB_DIGEST_PROFILE_TEXT}\n"
             f"Preferences: {PREFERENCES}\n\n"
             "Job:\n"
             f"Title: {record.role}\n"
             f"Company: {record.company}\n"
             f"Location: {record.location}\n"
             f"Posted: {record.posted}\n"
-            f"Notes: {record.notes}\n"
+            f"Summary: {record.notes}\n"
         )
         try:
             response = model.generate_content(prompt)
@@ -1197,6 +1278,21 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
         if isinstance(prep_questions, list):
             record.prep_questions = [str(q).strip() for q in prep_questions if str(q).strip()]
         record.apply_tips = data.get("apply_tips", record.apply_tips) or record.apply_tips
+        record.role_summary = data.get("role_summary", record.role_summary) or record.role_summary
+        record.tailored_summary = data.get("tailored_summary", record.tailored_summary) or record.tailored_summary
+        bullets = data.get("tailored_cv_bullets", record.tailored_cv_bullets)
+        if isinstance(bullets, str):
+            bullets = [bullets]
+        if isinstance(bullets, list):
+            record.tailored_cv_bullets = [str(b).strip() for b in bullets if str(b).strip()]
+        requirements = data.get("key_requirements", record.key_requirements)
+        if isinstance(requirements, str):
+            requirements = [requirements]
+        if isinstance(requirements, list):
+            record.key_requirements = [str(r).strip() for r in requirements if str(r).strip()]
+        record.match_notes = data.get("match_notes", record.match_notes) or record.match_notes
+        record.company_insights = data.get("company_insights", record.company_insights) or record.company_insights
+        record.cover_letter = data.get("cover_letter", record.cover_letter) or record.cover_letter
 
         time.sleep(0.25)
 
@@ -1255,6 +1351,21 @@ def write_records_to_firestore(records: List[JobRecord]) -> None:
             "apply_tips": record.apply_tips,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
+        optional_fields = {
+            "role_summary": record.role_summary,
+            "tailored_summary": record.tailored_summary,
+            "tailored_cv_bullets": record.tailored_cv_bullets,
+            "key_requirements": record.key_requirements,
+            "match_notes": record.match_notes,
+            "company_insights": record.company_insights,
+            "cover_letter": record.cover_letter,
+        }
+        for key, value in optional_fields.items():
+            if isinstance(value, list):
+                if value:
+                    data[key] = value
+            elif value:
+                data[key] = value
         try:
             client.collection(FIREBASE_COLLECTION).document(doc_id).set(data, merge=True)
         except Exception:
@@ -2646,61 +2757,74 @@ def technojobs_search(session: requests.Session) -> List[Dict[str, str]]:
     base_url = JOB_BOARD_URLS.get("Technojobs")
     if not base_url:
         return jobs
+    base_urls = [base_url]
+    if base_url.startswith("https://www."):
+        base_urls.append(base_url.replace("https://www.", "https://"))
 
     job_map: Dict[str, Dict[str, str]] = {}
     for keyword in BROAD_BOARD_KEYWORDS[:3]:
         slug = slugify(keyword)
-        search_url = f"{base_url}/{slug}-jobs/london"
-        try:
-            resp = session.get(search_url, timeout=30)
-        except requests.RequestException:
-            continue
-        if resp.status_code != 200:
-            continue
+        for current_base in base_urls:
+            search_urls = [
+                f"{current_base}/{slug}-jobs/london",
+                f"{current_base}/{slug}-jobs",
+            ]
+            for search_url in search_urls:
+                try:
+                    resp = session.get(search_url, timeout=30)
+                except requests.exceptions.SSLError:
+                    try:
+                        resp = session.get(search_url, timeout=30, verify=False)
+                    except requests.RequestException:
+                        continue
+                except requests.RequestException:
+                    continue
+                if resp.status_code != 200:
+                    continue
 
-        soup = BeautifulSoup(resp.text, "html.parser")
-        candidates: List[str] = []
-        for anchor in soup.find_all("a", href=True):
-            href = anchor.get("href", "")
-            if "jobid=" not in href and "/job/" not in href and "job" not in href:
-                continue
-            candidates.append(href)
+                soup = BeautifulSoup(resp.text, "html.parser")
+                candidates: List[str] = []
+                for anchor in soup.find_all("a", href=True):
+                    href = anchor.get("href", "")
+                    if "jobid=" not in href and "/job/" not in href and "job" not in href:
+                        continue
+                    candidates.append(href)
 
-        for href in candidates:
-            link = urljoin(base_url, href) if href.startswith("/") else href
-            link = clean_link(link)
-            if not link or link in job_map:
-                continue
-            title = ""
-            anchor = soup.find("a", href=href)
-            if anchor:
-                title = normalize_text(anchor.get_text(" "))
-            if len(title) < 4:
-                title = "Product role"
+                for href in candidates:
+                    link = urljoin(current_base, href) if href.startswith("/") else href
+                    link = clean_link(link)
+                    if not link or link in job_map:
+                        continue
+                    title = ""
+                    anchor = soup.find("a", href=href)
+                    if anchor:
+                        title = normalize_text(anchor.get_text(" "))
+                    if len(title) < 4:
+                        title = "Product role"
 
-            posted_text = ""
-            if anchor:
-                container = anchor
-                for _ in range(4):
-                    if not container:
-                        break
-                    text_blob = normalize_text(container.get_text(" "))
-                    posted_text = extract_relative_posted_text(text_blob)
-                    if posted_text:
-                        break
-                    container = container.parent
+                    posted_text = ""
+                    if anchor:
+                        container = anchor
+                        for _ in range(4):
+                            if not container:
+                                break
+                            text_blob = normalize_text(container.get_text(" "))
+                            posted_text = extract_relative_posted_text(text_blob)
+                            if posted_text:
+                                break
+                            container = container.parent
 
-            job_map[link] = {
-                "title": title,
-                "company": "Technojobs",
-                "location": "London",
-                "link": link,
-                "posted_text": posted_text,
-                "posted_date": "",
-                "summary": "",
-                "source": "Technojobs",
-            }
-        time.sleep(0.2)
+                    job_map[link] = {
+                        "title": title,
+                        "company": "Technojobs",
+                        "location": "London",
+                        "link": link,
+                        "posted_text": posted_text,
+                        "posted_date": "",
+                        "summary": "",
+                        "source": "Technojobs",
+                    }
+                time.sleep(0.2)
 
     jobs.extend(job_map.values())
     return jobs
@@ -2711,6 +2835,13 @@ def indeed_search(session: requests.Session) -> List[Dict[str, str]]:
     base_url = JOB_BOARD_URLS.get("IndeedUK")
     if not base_url:
         return jobs
+
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-GB,en;q=0.9",
+        "Referer": "https://uk.indeed.com/",
+    }
 
     rss_jobs: List[Dict[str, str]] = []
     for keyword in BROAD_BOARD_KEYWORDS[:3]:
@@ -2755,9 +2886,11 @@ def indeed_search(session: requests.Session) -> List[Dict[str, str]]:
     for keyword in BROAD_BOARD_KEYWORDS[:3]:
         params = {"q": keyword, "l": "London", "fromage": 3, "sort": "date"}
         try:
-            resp = session.get(f"{base_url}/jobs", params=params, timeout=30)
+            resp = session.get(f"{base_url}/jobs", params=params, headers=headers, timeout=30)
         except requests.RequestException:
             continue
+        if resp.status_code == 403:
+            break
         if resp.status_code != 200:
             continue
 
@@ -3531,6 +3664,13 @@ def main() -> None:
             "Preference_Match": r.preference_match,
             "Why_Fit": r.why_fit,
             "CV_Gap": r.cv_gap,
+            "Role_Summary": r.role_summary,
+            "Tailored_Summary": r.tailored_summary,
+            "Tailored_CV_Bullets": " | ".join(r.tailored_cv_bullets),
+            "Key_Requirements": " | ".join(r.key_requirements),
+            "Match_Notes": r.match_notes,
+            "Company_Insights": r.company_insights,
+            "Cover_Letter": r.cover_letter,
             "Prep_Questions": " | ".join(r.prep_questions),
             "Apply_Tips": r.apply_tips,
             "Notes": r.notes,
