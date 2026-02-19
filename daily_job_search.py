@@ -366,6 +366,43 @@ SEARCH_LOCATIONS = [
     "Remote",
 ]
 
+EXCLUDE_LOCATION_TERMS = {
+    "canada",
+    "united states",
+    "usa",
+    "u.s.",
+    "australia",
+    "new zealand",
+    "singapore",
+    "hong kong",
+    "india",
+    "pakistan",
+    "philippines",
+    "malaysia",
+    "thailand",
+    "south africa",
+    "nigeria",
+    "kenya",
+    "rwanda",
+    "germany",
+    "france",
+    "spain",
+    "italy",
+    "netherlands",
+    "belgium",
+    "switzerland",
+    "sweden",
+    "norway",
+    "denmark",
+    "finland",
+    "poland",
+    "romania",
+    "bulgaria",
+    "austria",
+    "portugal",
+    "ireland",
+}
+
 EXCLUDE_TITLE_TERMS = {"growth"}
 EXCLUDE_COMPANIES = {"ebury"}
 
@@ -1195,15 +1232,21 @@ def is_relevant_title(title: str) -> bool:
     return False
 
 
-def is_relevant_location(location: str) -> bool:
-    loc_l = location.lower()
+def is_relevant_location(location: str, text: str = "") -> bool:
+    combined = f"{location} {text}".lower()
+    if "northern ireland" in combined:
+        return True
+    if any(term in combined for term in EXCLUDE_LOCATION_TERMS):
+        return False
     return any(
-        term in loc_l
+        term in combined
         for term in [
             "london",
             "greater london",
             "united kingdom",
             "england",
+            "scotland",
+            "wales",
             "uk",
             "gb",
             "great britain",
@@ -1246,7 +1289,9 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
             "key_requirements (array of strings), match_notes (string), company_insights (string), "
             "cover_letter (string).\n\n"
             "ATS rules: plain text, no tables, no columns, no icons, no bullet symbols other than '- '. "
-            "Bullets must be short, action-led, and include metrics if possible.\n\n"
+            "Bullets must be short, action-led, and include metrics if possible. "
+            "If the job text includes Qualifications/Requirements, extract 3-6 key requirements into "
+            "key_requirements and use match_notes to compare against the candidate profile.\n\n"
             f"Candidate profile: {JOB_DIGEST_PROFILE_TEXT}\n"
             f"Preferences: {PREFERENCES}\n\n"
             "Job:\n"
@@ -3381,12 +3426,12 @@ def main() -> None:
         location = job.get("location", "")
         if not is_relevant_title(title):
             continue
-        if not is_relevant_location(location):
-            continue
 
         desc_text, posted_detail, detail_location = linkedin_job_details(session, job["job_id"])
         if detail_location:
             location = detail_location
+        if not is_relevant_location(location, desc_text):
+            continue
 
         posted_text = posted_detail or job.get("posted_text", "")
         if not parse_posted_within_window(posted_text, job.get("posted_date", ""), WINDOW_HOURS):
@@ -3590,7 +3635,8 @@ def main() -> None:
         location = job.get("location", "") or "Remote"
         if not is_relevant_title(title):
             continue
-        if not is_relevant_location(location):
+        summary = job.get("summary", "")
+        if not is_relevant_location(location, summary):
             continue
 
         posted_text = job.get("posted_text", "")
@@ -3598,7 +3644,6 @@ def main() -> None:
         if not parse_posted_within_window(posted_text, posted_date, WINDOW_HOURS):
             continue
 
-        summary = job.get("summary", "")
         full_text = f"{title} {company} {summary}"
         score, _, _ = score_fit(full_text, company)
         if score < MIN_SCORE:
