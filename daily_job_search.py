@@ -92,6 +92,7 @@ class JobRecord:
     interview_focus: str = ""
     prep_questions: List[str] = field(default_factory=list)
     prep_answers: List[str] = field(default_factory=list)
+    prep_answer_sets: List[List[str]] = field(default_factory=list)
     scorecard: List[str] = field(default_factory=list)
     apply_tips: str = ""
     tailored_cv_sections: dict = field(default_factory=dict)
@@ -1429,8 +1430,10 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
             "Given the candidate profile and job summary, score fit 0-100 and produce ATS-ready outputs. "
             "Make interview prep deeper and role-specific, grounded in the candidate's actual work. "
             "Return JSON ONLY with keys: fit_score (int), why_fit (string), cv_gap (string), "
-            "prep_questions (array of 8-12 strings), prep_answers (array of 8-12 concise answer outlines "
-            "matching prep_questions), scorecard (array of 5-7 criteria with what good looks like), "
+            "prep_questions (array of 8-12 strings), prep_answer_sets (array of 8-12 arrays, each array "
+            "contains 3 answer options scored 8/10, 9/10, 10/10), "
+            "prep_answers (array of 8-12 concise answer outlines matching prep_questions), "
+            "scorecard (array of 5-7 criteria with what good looks like), "
             "apply_tips (string), role_summary (string), tailored_summary (string), "
             "tailored_cv_bullets (array of 4-6 bullet strings), key_requirements (array of strings), "
             "match_notes (string), company_insights (string), cover_letter (string), "
@@ -1471,6 +1474,29 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
             prep_answers = [prep_answers]
         if isinstance(prep_answers, list):
             record.prep_answers = [str(a).strip() for a in prep_answers if str(a).strip()]
+        prep_answer_sets = data.get("prep_answer_sets", record.prep_answer_sets)
+        normalized_sets: List[List[str]] = []
+        if isinstance(prep_answer_sets, dict):
+            prep_answer_sets = [prep_answer_sets]
+        if isinstance(prep_answer_sets, list):
+            for entry in prep_answer_sets:
+                answers = []
+                if isinstance(entry, dict):
+                    answers = entry.get("answers", []) or entry.get("options", []) or entry.get("values", [])
+                elif isinstance(entry, list):
+                    answers = entry
+                elif isinstance(entry, str):
+                    answers = [entry]
+                if isinstance(answers, str):
+                    answers = [answers]
+                if isinstance(answers, list):
+                    cleaned = [str(a).strip() for a in answers if str(a).strip()]
+                    if cleaned:
+                        normalized_sets.append(cleaned)
+        if normalized_sets:
+            record.prep_answer_sets = normalized_sets
+        elif record.prep_answers:
+            record.prep_answer_sets = [[ans, ans, ans] for ans in record.prep_answers]
         scorecard = data.get("scorecard", record.scorecard)
         if isinstance(scorecard, str):
             scorecard = [scorecard]
@@ -1627,6 +1653,7 @@ def write_records_to_firestore(records: List[JobRecord]) -> None:
             "quick_pitch": record.quick_pitch,
             "interview_focus": record.interview_focus,
             "prep_answers": record.prep_answers,
+            "prep_answer_sets": record.prep_answer_sets,
             "scorecard": record.scorecard,
             "tailored_cv_sections": record.tailored_cv_sections,
         }
@@ -4069,6 +4096,7 @@ def main() -> None:
             "Interview_Focus": r.interview_focus,
             "Prep_Questions": " | ".join(r.prep_questions),
             "Prep_Answers": " | ".join(r.prep_answers),
+            "Prep_Answer_Sets": " || ".join(" / ".join(ans) for ans in r.prep_answer_sets),
             "Scorecard": " | ".join(r.scorecard),
             "Apply_Tips": r.apply_tips,
             "Notes": r.notes,
