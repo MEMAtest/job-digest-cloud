@@ -130,6 +130,14 @@ TO_EMAIL = os.getenv("TO_EMAIL", "ademolaomosanya@gmail.com")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "") or os.getenv("JOB_DIGEST_GEMINI_KEY", "")
 GEMINI_MODEL = os.getenv("JOB_DIGEST_GEMINI_MODEL", "gemini-1.5-flash")
 GEMINI_MAX_JOBS = int(os.getenv("JOB_DIGEST_GEMINI_MAX_JOBS", "20"))
+GEMINI_FALLBACK_MODELS = [
+    model.strip()
+    for model in os.getenv(
+        "JOB_DIGEST_GEMINI_FALLBACK",
+        "models/gemini-flash-latest,models/gemini-2.0-flash",
+    ).split(",")
+    if model.strip()
+]
 JOB_DIGEST_CV_PATH = os.getenv(
     "JOB_DIGEST_CV_PATH",
     "/Users/adeomosanya/Downloads/AdemolaOmosanya_2026.pdf",
@@ -1382,14 +1390,27 @@ def parse_gemini_payload(text: str) -> Optional[Dict[str, object]]:
         return None
 
 
-def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
+def generate_gemini_text(prompt: str) -> Optional[str]:
     if not GEMINI_API_KEY or genai is None:
-        return records
-
+        return None
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(GEMINI_MODEL)
     except Exception:
+        return None
+
+    model_names = [GEMINI_MODEL] + [m for m in GEMINI_FALLBACK_MODELS if m != GEMINI_MODEL]
+    for name in model_names:
+        try:
+            model = genai.GenerativeModel(name)
+            response = model.generate_content(prompt)
+            return getattr(response, "text", "") or ""
+        except Exception:
+            continue
+    return None
+
+
+def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
+    if not GEMINI_API_KEY or genai is None:
         return records
 
     limit = min(GEMINI_MAX_JOBS, len(records))
@@ -1424,12 +1445,8 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
             f"Posted: {record.posted}\n"
             f"Summary: {record.notes}\n"
         )
-        try:
-            response = model.generate_content(prompt)
-        except Exception:
-            continue
-
-        data = parse_gemini_payload(getattr(response, "text", "") or "")
+        text = generate_gemini_text(prompt)
+        data = parse_gemini_payload(text or "")
         if not data:
             continue
 
@@ -1598,23 +1615,14 @@ def write_role_suggestions() -> None:
         return
     if not GEMINI_API_KEY or genai is None:
         return
-    try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(GEMINI_MODEL)
-    except Exception:
-        return
-
     prompt = (
         "You are a UK career strategist. Based on the candidate profile, suggest 6-10 adjacent roles "
         "they could be suitable for beyond exact Product Manager titles. Return JSON ONLY with keys: "
         "roles (array of strings) and rationale (string). Keep roles UK market relevant.\n\n"
         f"Candidate profile: {JOB_DIGEST_PROFILE_TEXT}\n"
     )
-    try:
-        response = model.generate_content(prompt)
-    except Exception:
-        return
-    data = parse_gemini_payload(getattr(response, "text", "") or "") or {}
+    text = generate_gemini_text(prompt)
+    data = parse_gemini_payload(text or "") or {}
     roles = data.get("roles", [])
     if isinstance(roles, str):
         roles = [roles]
@@ -1639,12 +1647,6 @@ def write_candidate_prep() -> None:
         return
     if not GEMINI_API_KEY or genai is None:
         return
-    try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(GEMINI_MODEL)
-    except Exception:
-        return
-
     prompt = (
         "You are a UK executive interview coach. Create a deeper interview prep sheet for Ade, "
         "anchored in his actual work (KYC/onboarding/screening transformation, orchestration, dashboards, "
@@ -1655,11 +1657,8 @@ def write_candidate_prep() -> None:
         "risk_mitigations (array of 3-5 strings), interview_questions (array of 10 questions Ade should rehearse).\n\n"
         f"Candidate profile: {JOB_DIGEST_PROFILE_TEXT}\n"
     )
-    try:
-        response = model.generate_content(prompt)
-    except Exception:
-        return
-    data = parse_gemini_payload(getattr(response, "text", "") or "") or {}
+    text = generate_gemini_text(prompt)
+    data = parse_gemini_payload(text or "") or {}
     key_stats = data.get("key_stats", [])
     if isinstance(key_stats, str):
         key_stats = [key_stats]
