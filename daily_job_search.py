@@ -86,6 +86,8 @@ class JobRecord:
     quick_pitch: str = ""
     interview_focus: str = ""
     prep_questions: List[str] = field(default_factory=list)
+    prep_answers: List[str] = field(default_factory=list)
+    scorecard: List[str] = field(default_factory=list)
     apply_tips: str = ""
 
 
@@ -1394,12 +1396,15 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
         prompt = (
             "You are a senior UK fintech product recruiter and ATS optimisation specialist. "
             "Given the candidate profile and job summary, score fit 0-100 and produce ATS-ready outputs. "
+            "Make interview prep deeper and role-specific, grounded in the candidate's actual work. "
             "Return JSON ONLY with keys: fit_score (int), why_fit (string), cv_gap (string), "
-            "prep_questions (array of 3-5 strings), apply_tips (string), role_summary (string), "
-            "tailored_summary (string), tailored_cv_bullets (array of 4-6 bullet strings), "
-            "key_requirements (array of strings), match_notes (string), company_insights (string), "
-            "cover_letter (string), key_talking_points (array of strings), star_stories (array of strings), "
-            "quick_pitch (string), interview_focus (string).\n\n"
+            "prep_questions (array of 8-12 strings), prep_answers (array of 8-12 concise answer outlines "
+            "matching prep_questions), scorecard (array of 5-7 criteria with what good looks like), "
+            "apply_tips (string), role_summary (string), tailored_summary (string), "
+            "tailored_cv_bullets (array of 4-6 bullet strings), key_requirements (array of strings), "
+            "match_notes (string), company_insights (string), cover_letter (string), "
+            "key_talking_points (array of 6-10 strings), star_stories (array of 6-8 STAR summaries with "
+            "Situation/Task/Action/Result + metrics), quick_pitch (string), interview_focus (string).\n\n"
             "ATS rules: plain text, no tables, no columns, no icons, no bullet symbols other than '- '. "
             "Bullets must be short, action-led, and include metrics if possible. "
             "If the job text includes Qualifications/Requirements, extract 3-6 key requirements into "
@@ -1434,6 +1439,16 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
             prep_questions = [prep_questions]
         if isinstance(prep_questions, list):
             record.prep_questions = [str(q).strip() for q in prep_questions if str(q).strip()]
+        prep_answers = data.get("prep_answers", record.prep_answers)
+        if isinstance(prep_answers, str):
+            prep_answers = [prep_answers]
+        if isinstance(prep_answers, list):
+            record.prep_answers = [str(a).strip() for a in prep_answers if str(a).strip()]
+        scorecard = data.get("scorecard", record.scorecard)
+        if isinstance(scorecard, str):
+            scorecard = [scorecard]
+        if isinstance(scorecard, list):
+            record.scorecard = [str(s).strip() for s in scorecard if str(s).strip()]
         record.apply_tips = data.get("apply_tips", record.apply_tips) or record.apply_tips
         record.role_summary = data.get("role_summary", record.role_summary) or record.role_summary
         record.tailored_summary = data.get("tailored_summary", record.tailored_summary) or record.tailored_summary
@@ -1532,6 +1547,8 @@ def write_records_to_firestore(records: List[JobRecord]) -> None:
             "star_stories": record.star_stories,
             "quick_pitch": record.quick_pitch,
             "interview_focus": record.interview_focus,
+            "prep_answers": record.prep_answers,
+            "scorecard": record.scorecard,
         }
         for key, value in optional_fields.items():
             if isinstance(value, list):
@@ -1621,10 +1638,13 @@ def write_candidate_prep() -> None:
         return
 
     prompt = (
-        "You are a UK executive interview coach. Create a concise interview prep sheet for Ade. "
-        "Return JSON ONLY with keys: key_stats (array of strings), key_talking_points (array of strings), "
-        "star_stories (array of 6-8 STAR summaries), and quick_pitch (string, 60-90 words). "
-        "Keep it clear, confident, and memorable.\n\n"
+        "You are a UK executive interview coach. Create a deeper interview prep sheet for Ade, "
+        "anchored in his actual work (KYC/onboarding/screening transformation, orchestration, dashboards, "
+        "operational controls, and stakeholder delivery). Return JSON ONLY with keys: "
+        "quick_pitch (string, 90-120 words), key_stats (array of 6-10 strings), "
+        "key_talking_points (array of 8-12 strings), star_stories (array of 8-10 STAR summaries with "
+        "Situation/Task/Action/Result + metrics), strengths (array of 4-6 strings), "
+        "risk_mitigations (array of 3-5 strings), interview_questions (array of 10 questions Ade should rehearse).\n\n"
         f"Candidate profile: {JOB_DIGEST_PROFILE_TEXT}\n"
     )
     try:
@@ -1645,6 +1665,18 @@ def write_candidate_prep() -> None:
         stories = [stories]
     stories = [str(s).strip() for s in stories if str(s).strip()]
     quick_pitch = data.get("quick_pitch", "")
+    strengths = data.get("strengths", [])
+    if isinstance(strengths, str):
+        strengths = [strengths]
+    strengths = [str(s).strip() for s in strengths if str(s).strip()]
+    risk_mitigations = data.get("risk_mitigations", [])
+    if isinstance(risk_mitigations, str):
+        risk_mitigations = [risk_mitigations]
+    risk_mitigations = [str(s).strip() for s in risk_mitigations if str(s).strip()]
+    interview_questions = data.get("interview_questions", [])
+    if isinstance(interview_questions, str):
+        interview_questions = [interview_questions]
+    interview_questions = [str(s).strip() for s in interview_questions if str(s).strip()]
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     payload = {
@@ -1653,6 +1685,9 @@ def write_candidate_prep() -> None:
         "key_talking_points": key_points,
         "star_stories": stories,
         "quick_pitch": quick_pitch,
+        "strengths": strengths,
+        "risk_mitigations": risk_mitigations,
+        "interview_questions": interview_questions,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
@@ -3968,6 +4003,8 @@ def main() -> None:
             "Quick_Pitch": r.quick_pitch,
             "Interview_Focus": r.interview_focus,
             "Prep_Questions": " | ".join(r.prep_questions),
+            "Prep_Answers": " | ".join(r.prep_answers),
+            "Scorecard": " | ".join(r.scorecard),
             "Apply_Tips": r.apply_tips,
             "Notes": r.notes,
         }
