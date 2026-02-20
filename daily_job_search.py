@@ -1183,7 +1183,7 @@ def should_run_now(force: bool = False) -> bool:
         delta_minutes = abs((now_local - target).total_seconds()) / 60.0
         if delta_minutes > RUN_WINDOW_MINUTES:
             continue
-        slot_key = f\"{now_local.strftime('%Y-%m-%d')}-{target_hour:02d}:{target_minute:02d}\"
+        slot_key = f"{now_local.strftime('%Y-%m-%d')}-{target_hour:02d}:{target_minute:02d}"
         if slot_key in last_slots:
             continue
         return True
@@ -1349,22 +1349,22 @@ def is_relevant_location(location: str, text: str = "") -> bool:
         return True
     if any(term in combined for term in EXCLUDE_LOCATION_TERMS):
         return False
-    return any(
-        term in combined
-        for term in [
-            "london",
-            "greater london",
-            "united kingdom",
-            "england",
-            "scotland",
-            "wales",
-            "uk",
-            "gb",
-            "great britain",
-            "remote",
-            "hybrid",
-        ]
-    )
+    uk_terms = [
+        "london",
+        "greater london",
+        "united kingdom",
+        "england",
+        "scotland",
+        "wales",
+        "uk",
+        "gb",
+        "great britain",
+    ]
+    if any(term in combined for term in uk_terms):
+        return True
+    if "remote" in combined or "hybrid" in combined:
+        return any(term in combined for term in uk_terms)
+    return False
 
 
 def parse_gemini_payload(text: str) -> Optional[Dict[str, object]]:
