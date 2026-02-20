@@ -1400,6 +1400,22 @@ def parse_gemini_payload(text: str) -> Optional[Dict[str, object]]:
         return None
 
 
+def format_star_story_entry(entry: object) -> str:
+    if isinstance(entry, dict):
+        parts = []
+        for key in ["Situation", "Task", "Action", "Result"]:
+            value = entry.get(key) or entry.get(key.lower()) or entry.get(key.upper())
+            if value:
+                parts.append(f"{key}: {value}")
+        if not parts:
+            for key, value in entry.items():
+                parts.append(f"{key}: {value}")
+        return "\n".join(str(p).strip() for p in parts if str(p).strip()).strip()
+    if isinstance(entry, str):
+        return entry.strip()
+    return str(entry).strip()
+
+
 def generate_gemini_text(prompt: str) -> Optional[str]:
     if not GEMINI_API_KEY or genai is None:
         return None
@@ -1527,7 +1543,9 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
         if isinstance(stories, str):
             stories = [stories]
         if isinstance(stories, list):
-            record.star_stories = [str(s).strip() for s in stories if str(s).strip()]
+            record.star_stories = [
+                format_star_story_entry(s) for s in stories if format_star_story_entry(s)
+            ]
         record.quick_pitch = data.get("quick_pitch", record.quick_pitch) or record.quick_pitch
         record.interview_focus = data.get("interview_focus", record.interview_focus) or record.interview_focus
 
@@ -1752,7 +1770,7 @@ def write_candidate_prep() -> None:
     stories = data.get("star_stories", [])
     if isinstance(stories, str):
         stories = [stories]
-    stories = [str(s).strip() for s in stories if str(s).strip()]
+    stories = [format_star_story_entry(s) for s in stories if format_star_story_entry(s)]
     quick_pitch = data.get("quick_pitch", "")
     strengths = data.get("strengths", [])
     if isinstance(strengths, str):
