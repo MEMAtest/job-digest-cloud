@@ -89,6 +89,7 @@ class JobRecord:
     prep_answers: List[str] = field(default_factory=list)
     scorecard: List[str] = field(default_factory=list)
     apply_tips: str = ""
+    tailored_cv_sections: dict = field(default_factory=dict)
 
 
 DEFAULT_BASE_DIR = Path("/Users/adeomosanya/Documents/job apps/roles")
@@ -1404,7 +1405,12 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
             "tailored_cv_bullets (array of 4-6 bullet strings), key_requirements (array of strings), "
             "match_notes (string), company_insights (string), cover_letter (string), "
             "key_talking_points (array of 6-10 strings), star_stories (array of 6-8 STAR summaries with "
-            "Situation/Task/Action/Result + metrics), quick_pitch (string), interview_focus (string).\n\n"
+            "Situation/Task/Action/Result + metrics), quick_pitch (string), interview_focus (string), "
+            "tailored_cv_sections (object with keys: summary — 2-3 sentence professional summary tailored "
+            "to this specific role, key_achievements — array of 5-7 bullet strings reordered/rewritten "
+            "from the candidate's real achievements to emphasise relevance to this JD, vistra_bullets — "
+            "array of 8-10 bullet strings for the Vistra role tailored to this JD, ebury_bullets — array "
+            "of 4-5 bullet strings for the Ebury role tailored to this JD).\n\n"
             "ATS rules: plain text, no tables, no columns, no icons, no bullet symbols other than '- '. "
             "Bullets must be short, action-led, and include metrics if possible. "
             "If the job text includes Qualifications/Requirements, extract 3-6 key requirements into "
@@ -1477,6 +1483,7 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
             record.star_stories = [str(s).strip() for s in stories if str(s).strip()]
         record.quick_pitch = data.get("quick_pitch", record.quick_pitch) or record.quick_pitch
         record.interview_focus = data.get("interview_focus", record.interview_focus) or record.interview_focus
+        record.tailored_cv_sections = data.get("tailored_cv_sections", {}) or {}
 
         time.sleep(0.25)
 
@@ -1549,6 +1556,7 @@ def write_records_to_firestore(records: List[JobRecord]) -> None:
             "interview_focus": record.interview_focus,
             "prep_answers": record.prep_answers,
             "scorecard": record.scorecard,
+            "tailored_cv_sections": record.tailored_cv_sections,
         }
         for key, value in optional_fields.items():
             if isinstance(value, list):
@@ -4019,6 +4027,43 @@ def main() -> None:
         df.to_excel(out_xlsx, index=False)
         df.to_csv(out_csv, index=False)
 
+    # Build pipeline summary for email
+    pipeline_summary_html = ""
+    try:
+        fs_client = init_firestore_client()
+        if fs_client:
+            all_docs = fs_client.collection(FIREBASE_COLLECTION).stream()
+            pipeline_counts = {"saved": 0, "applied": 0, "interview": 0, "offer": 0, "rejected": 0}
+            follow_ups_due = []
+            today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            for d in all_docs:
+                data = d.to_dict()
+                status = (data.get("application_status") or "saved").lower()
+                if status in pipeline_counts:
+                    pipeline_counts[status] += 1
+                fu = data.get("follow_up_date", "")
+                if fu and fu[:10] <= today_str and status not in ("rejected", "offer"):
+                    follow_ups_due.append(f"{data.get('role', '?')} at {data.get('company', '?')}")
+            pipeline_cells = " | ".join(
+                f"<strong>{k.title()}</strong>: {v}" for k, v in pipeline_counts.items()
+            )
+            pipeline_summary_html = (
+                "<div style='background:#EEF2FF; border:1px solid #C7D2FE; padding:12px; "
+                "border-radius:8px; margin-bottom:14px; font-size:14px; color:#1E1B4B;'>"
+                f"<div style='font-weight:bold; margin-bottom:6px;'>Pipeline Summary</div>"
+                f"<div>{pipeline_cells}</div>"
+            )
+            if follow_ups_due:
+                fu_list = ", ".join(follow_ups_due[:5])
+                more = f" (+{len(follow_ups_due) - 5} more)" if len(follow_ups_due) > 5 else ""
+                pipeline_summary_html += (
+                    f"<div style='margin-top:8px; color:#DC2626;'>"
+                    f"<strong>Follow-ups due:</strong> {fu_list}{more}</div>"
+                )
+            pipeline_summary_html += "</div>"
+    except Exception:
+        pass
+
     # Build and send email
     top_pick = select_top_pick(records)
     top_records = records[:MAX_EMAIL_ROLES]
@@ -4026,6 +4071,9 @@ def main() -> None:
         top_records = [top_pick] + top_records
         top_records = top_records[:MAX_EMAIL_ROLES]
     html_body = build_email_html(top_records, WINDOW_HOURS)
+    # Inject pipeline summary at the top of the email body
+    if pipeline_summary_html and "<h2" in html_body:
+        html_body = html_body.replace("</h2>", "</h2>" + pipeline_summary_html, 1)
     text_lines = [
         f"Daily job digest (last {WINDOW_HOURS} hours).",
         f"Preferences: {PREFERENCES}",
