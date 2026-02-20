@@ -53,6 +53,11 @@ except Exception:  # noqa: BLE001
     genai = None
 
 try:
+    import openai as openai_lib
+except Exception:  # noqa: BLE001
+    openai_lib = None
+
+try:
     import firebase_admin
     from firebase_admin import credentials, firestore
 except Exception:  # noqa: BLE001
@@ -138,6 +143,10 @@ GEMINI_FALLBACK_MODELS = [
     ).split(",")
     if model.strip()
 ]
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.getenv("JOB_DIGEST_OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_CV_MAX_JOBS = int(os.getenv("JOB_DIGEST_OPENAI_CV_MAX_JOBS", "20"))
+
 JOB_DIGEST_CV_PATH = os.getenv(
     "JOB_DIGEST_CV_PATH",
     "/Users/adeomosanya/Downloads/AdemolaOmosanya_2026.pdf",
@@ -1426,12 +1435,7 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
             "tailored_cv_bullets (array of 4-6 bullet strings), key_requirements (array of strings), "
             "match_notes (string), company_insights (string), cover_letter (string), "
             "key_talking_points (array of 6-10 strings), star_stories (array of 6-8 STAR summaries with "
-            "Situation/Task/Action/Result + metrics), quick_pitch (string), interview_focus (string), "
-            "tailored_cv_sections (object with keys: summary — 2-3 sentence professional summary tailored "
-            "to this specific role, key_achievements — array of 5-7 bullet strings reordered/rewritten "
-            "from the candidate's real achievements to emphasise relevance to this JD, vistra_bullets — "
-            "array of 8-10 bullet strings for the Vistra role tailored to this JD, ebury_bullets — array "
-            "of 4-5 bullet strings for the Ebury role tailored to this JD).\n\n"
+            "Situation/Task/Action/Result + metrics), quick_pitch (string), interview_focus (string).\n\n"
             "ATS rules: plain text, no tables, no columns, no icons, no bullet symbols other than '- '. "
             "Bullets must be short, action-led, and include metrics if possible. "
             "If the job text includes Qualifications/Requirements, extract 3-6 key requirements into "
@@ -1500,9 +1504,60 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
             record.star_stories = [str(s).strip() for s in stories if str(s).strip()]
         record.quick_pitch = data.get("quick_pitch", record.quick_pitch) or record.quick_pitch
         record.interview_focus = data.get("interview_focus", record.interview_focus) or record.interview_focus
-        record.tailored_cv_sections = data.get("tailored_cv_sections", {}) or {}
 
         time.sleep(0.25)
+
+    return records
+
+
+def enhance_records_with_openai_cv(records: List[JobRecord]) -> List[JobRecord]:
+    """Generate tailored CV sections via OpenAI for each record."""
+    if not OPENAI_API_KEY or openai_lib is None:
+        return records
+
+    client = openai_lib.OpenAI(api_key=OPENAI_API_KEY)
+    limit = min(OPENAI_CV_MAX_JOBS, len(records))
+
+    for record in records[:limit]:
+        prompt = (
+            "You are a senior CV writer specialising in UK fintech and financial services product roles. "
+            "Given the candidate's real CV text and a target job description, produce tailored CV section "
+            "replacements that will pass ATS screening and impress a hiring manager.\n\n"
+            "Return JSON ONLY with a single key 'tailored_cv_sections' containing:\n"
+            "- summary: 2-3 sentence professional summary tailored to this specific role\n"
+            "- key_achievements: array of 5-7 bullet strings reordered/rewritten from the candidate's "
+            "real achievements to emphasise relevance to this JD (start each with '- ')\n"
+            "- vistra_bullets: array of 8-10 bullet strings for the Vistra Corporate Services role "
+            "tailored to this JD (start each with '- ')\n"
+            "- ebury_bullets: array of 4-5 bullet strings for the Ebury Partners role "
+            "tailored to this JD (start each with '- ')\n\n"
+            "Rules: plain text only, no tables, no icons. Bullets must be action-led with metrics. "
+            "Keep the candidate's real experience — rewrite emphasis and ordering, don't fabricate.\n\n"
+            f"Candidate CV:\n{JOB_DIGEST_PROFILE_TEXT}\n\n"
+            "Target job:\n"
+            f"Title: {record.role}\n"
+            f"Company: {record.company}\n"
+            f"Location: {record.location}\n"
+            f"Summary: {record.notes}\n"
+        )
+        try:
+            response = client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.4,
+                max_tokens=2000,
+            )
+            text = response.choices[0].message.content or ""
+            data = parse_gemini_payload(text)  # reuse JSON extractor
+            if data:
+                sections = data.get("tailored_cv_sections", data)
+                if isinstance(sections, dict):
+                    record.tailored_cv_sections = sections
+        except Exception as e:
+            print(f"OpenAI CV generation failed for {record.role} at {record.company}: {e}")
+            continue
+
+        time.sleep(0.3)
 
     return records
 
@@ -3974,6 +4029,9 @@ def main() -> None:
     # Optional Gemini enhancement (fit %, gaps, prep)
     records = enhance_records_with_gemini(records)
     records = sorted(records, key=lambda record: record.fit_score, reverse=True)
+
+    # Optional OpenAI tailored CV generation
+    records = enhance_records_with_openai_cv(records)
 
     # Optional Firebase persistence
     write_records_to_firestore(records)
