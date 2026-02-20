@@ -92,7 +92,7 @@ class JobRecord:
     interview_focus: str = ""
     prep_questions: List[str] = field(default_factory=list)
     prep_answers: List[str] = field(default_factory=list)
-    prep_answer_sets: List[List[str]] = field(default_factory=list)
+    prep_answer_sets: List[Dict[str, object]] = field(default_factory=list)
     scorecard: List[str] = field(default_factory=list)
     apply_tips: str = ""
     tailored_cv_sections: dict = field(default_factory=dict)
@@ -1436,6 +1436,15 @@ def build_answer_variants(answer: str) -> List[str]:
     return [basic, strong, elite]
 
 
+def build_answer_option_set(answer: str) -> Dict[str, object]:
+    variants = build_answer_variants(answer)
+    scores = [8, 9, 10]
+    answers = []
+    for idx, variant in enumerate(variants[:3]):
+        answers.append({"score": scores[idx], "text": variant})
+    return {"answers": answers}
+
+
 def generate_gemini_text(prompt: str) -> Optional[str]:
     if not GEMINI_API_KEY or genai is None:
         return None
@@ -1511,7 +1520,7 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
         if isinstance(prep_answers, list):
             record.prep_answers = [str(a).strip() for a in prep_answers if str(a).strip()]
         prep_answer_sets = data.get("prep_answer_sets", record.prep_answer_sets)
-        normalized_sets: List[List[str]] = []
+        normalized_sets: List[Dict[str, object]] = []
         if isinstance(prep_answer_sets, dict):
             prep_answer_sets = [prep_answer_sets]
         if isinstance(prep_answer_sets, list):
@@ -1528,11 +1537,13 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
                 if isinstance(answers, list):
                     cleaned = [str(a).strip() for a in answers if str(a).strip()]
                     if cleaned:
-                        normalized_sets.append(cleaned)
+                        normalized_sets.append({"answers": [{"score": 8, "text": cleaned[0]},
+                                                            {"score": 9, "text": cleaned[min(1, len(cleaned)-1)]},
+                                                            {"score": 10, "text": cleaned[min(2, len(cleaned)-1)]}]})
         if normalized_sets:
             record.prep_answer_sets = normalized_sets
         elif record.prep_answers:
-            record.prep_answer_sets = [build_answer_variants(ans) for ans in record.prep_answers]
+            record.prep_answer_sets = [build_answer_option_set(ans) for ans in record.prep_answers]
         scorecard = data.get("scorecard", record.scorecard)
         if isinstance(scorecard, str):
             scorecard = [scorecard]
