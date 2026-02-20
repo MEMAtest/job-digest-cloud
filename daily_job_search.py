@@ -1412,8 +1412,28 @@ def format_star_story_entry(entry: object) -> str:
                 parts.append(f"{key}: {value}")
         return "\n".join(str(p).strip() for p in parts if str(p).strip()).strip()
     if isinstance(entry, str):
-        return entry.strip()
+        text = entry.strip()
+        if text.startswith("{") and "Situation" in text:
+            try:
+                cleaned = text
+                cleaned = cleaned.replace("'", "\"")
+                cleaned = cleaned.replace("None", "null").replace("True", "true").replace("False", "false")
+                data = json.loads(cleaned)
+                return format_star_story_entry(data)
+            except Exception:
+                return text
+        return text
     return str(entry).strip()
+
+
+def build_answer_variants(answer: str) -> List[str]:
+    if not answer:
+        return []
+    parts = re.split(r"(?<=[.!?])\s+", answer.strip())
+    basic = parts[0] if parts else answer
+    strong = answer.strip()
+    elite = f"{strong} Include quantified impact, stakeholder outcome, and risk controls."
+    return [basic, strong, elite]
 
 
 def generate_gemini_text(prompt: str) -> Optional[str]:
@@ -1512,7 +1532,7 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
         if normalized_sets:
             record.prep_answer_sets = normalized_sets
         elif record.prep_answers:
-            record.prep_answer_sets = [[ans, ans, ans] for ans in record.prep_answers]
+            record.prep_answer_sets = [build_answer_variants(ans) for ans in record.prep_answers]
         scorecard = data.get("scorecard", record.scorecard)
         if isinstance(scorecard, str):
             scorecard = [scorecard]
