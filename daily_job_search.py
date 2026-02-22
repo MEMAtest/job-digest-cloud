@@ -96,6 +96,9 @@ class JobRecord:
     scorecard: List[str] = field(default_factory=list)
     apply_tips: str = ""
     tailored_cv_sections: dict = field(default_factory=dict)
+    ats_keywords_found: List[str] = field(default_factory=list)
+    ats_keywords_missing: List[str] = field(default_factory=list)
+    ats_keyword_coverage: int = 0
 
 
 DEFAULT_BASE_DIR = Path("/Users/adeomosanya/Documents/job apps/roles")
@@ -145,7 +148,7 @@ GEMINI_FALLBACK_MODELS = [
     if model.strip()
 ]
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_MODEL = os.getenv("JOB_DIGEST_OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_MODEL = os.getenv("JOB_DIGEST_OPENAI_MODEL", "gpt-4o")
 OPENAI_CV_MAX_JOBS = int(os.getenv("JOB_DIGEST_OPENAI_CV_MAX_JOBS", "20"))
 
 JOB_DIGEST_CV_PATH = os.getenv(
@@ -621,6 +624,136 @@ EXTRA_TERMS = [
     "configuration",
     "integration",
 ]
+
+ATS_SYNONYMS = {
+    "aml": ["anti-money laundering", "anti money laundering"],
+    "kyc": ["know your customer", "know your client"],
+    "kyb": ["know your business"],
+    "cdd": ["customer due diligence", "client due diligence"],
+    "edd": ["enhanced due diligence"],
+    "pm": ["product manager", "product management"],
+    "ux": ["user experience"],
+    "ui": ["user interface"],
+    "ml": ["machine learning"],
+    "ai": ["artificial intelligence"],
+    "ci/cd": ["continuous integration", "continuous deployment"],
+    "api": ["application programming interface"],
+    "saas": ["software as a service"],
+    "b2b": ["business to business"],
+    "b2c": ["business to consumer"],
+    "pep": ["politically exposed person", "politically exposed persons"],
+    "sow": ["source of wealth"],
+    "sof": ["source of funds"],
+    "cft": ["counter financing of terrorism", "combating the financing of terrorism"],
+    "strs": ["suspicious transaction reports"],
+    "sars": ["suspicious activity reports"],
+    "fatf": ["financial action task force"],
+    "fca": ["financial conduct authority"],
+    "psd2": ["payment services directive"],
+    "gdpr": ["general data protection regulation"],
+    "rbac": ["role based access control"],
+    "sql": ["structured query language"],
+    "etl": ["extract transform load"],
+    "kpi": ["key performance indicator", "key performance indicators"],
+    "okr": ["objectives and key results"],
+    "mvp": ["minimum viable product"],
+    "sdk": ["software development kit"],
+    "rest": ["representational state transfer"],
+    "grpc": ["google remote procedure call"],
+}
+
+ATS_REQUIREMENT_HEADERS = re.compile(
+    r"(?:requirements?|qualifications?|must.have|essential|desired|skills?"
+    r"|experience needed|what you.ll need|what we.re looking for|about you"
+    r"|who you are|you.ll bring|you should have|nice to have)[:\s]*",
+    re.IGNORECASE,
+)
+
+_ATS_PHRASE_PATTERNS = re.compile(
+    r"(?:experience (?:with|in)|knowledge of|proficiency in|familiar(?:ity)? with"
+    r"|understanding of|background in|expertise in|skilled in|working with)\s+([^,.;\n]+)",
+    re.IGNORECASE,
+)
+
+_ATS_ACRONYM_RE = re.compile(r"\b[A-Z][A-Z0-9/]{1,8}\b")
+
+
+def extract_jd_keywords(text: str) -> List[str]:
+    """Extract meaningful keywords/phrases from a job description."""
+    keywords: set = set()
+
+    # 1. Extract terms after requirement-pattern phrases
+    for m in _ATS_PHRASE_PATTERNS.finditer(text):
+        phrase = m.group(1).strip().rstrip(".")
+        if 2 <= len(phrase) <= 60:
+            keywords.add(phrase.lower())
+
+    # 2. Extract bullet-point items under requirement headers
+    sections = ATS_REQUIREMENT_HEADERS.split(text)
+    for section in sections[1:]:  # skip text before first header
+        lines = section.split("\n")
+        for line in lines[:30]:  # cap to avoid runaway
+            stripped = line.strip().lstrip("-•*▪►→·– ")
+            if not stripped:
+                continue
+            # Stop if we hit a new non-bullet section header
+            if stripped.endswith(":") and len(stripped.split()) <= 5:
+                break
+            # Extract the core phrase (first ~60 chars, before any parenthetical)
+            core = stripped.split("(")[0].strip().rstrip(".,;:")
+            if 2 <= len(core) <= 80:
+                keywords.add(core.lower())
+
+    # 3. Extract capitalised acronyms (KYC, AML, SQL, etc.)
+    for m in _ATS_ACRONYM_RE.finditer(text):
+        acr = m.group(0)
+        if len(acr) >= 2:
+            keywords.add(acr.lower())
+
+    # 4. Merge with DOMAIN_TERMS and EXTRA_TERMS found in JD
+    text_l = text.lower()
+    for term in DOMAIN_TERMS + EXTRA_TERMS:
+        if term in text_l:
+            keywords.add(term)
+
+    # 5. Filter out very generic/short noise words
+    stop = {"the", "and", "or", "a", "an", "in", "of", "to", "for", "is",
+            "are", "be", "we", "you", "our", "your", "with", "as", "at",
+            "on", "by", "it", "us", "if", "so", "no", "do", "up"}
+    keywords = {kw for kw in keywords if kw not in stop and len(kw) >= 2}
+
+    return sorted(keywords)
+
+
+def ats_keyword_match(jd_text: str, cv_text: str) -> dict:
+    """Compare JD keywords against candidate CV. Returns coverage stats."""
+    if not cv_text or not cv_text.strip():
+        return {"ats_keywords_found": [], "ats_keywords_missing": [], "ats_keyword_coverage": 0}
+    jd_keywords = extract_jd_keywords(jd_text)
+    cv_lower = cv_text.lower()
+    matched = []
+    missing = []
+    for kw in jd_keywords:
+        kw_lower = kw.lower()
+        found = kw_lower in cv_lower
+        if not found:
+            # Check synonyms in both directions
+            for syn_key, syn_values in ATS_SYNONYMS.items():
+                if kw_lower == syn_key and any(s in cv_lower for s in syn_values):
+                    found = True
+                    break
+                if kw_lower in syn_values and syn_key in cv_lower:
+                    found = True
+                    break
+        (matched if found else missing).append(kw)
+
+    total = len(jd_keywords) or 1
+    return {
+        "ats_keywords_found": matched,
+        "ats_keywords_missing": missing,
+        "ats_keyword_coverage": round(len(matched) / total * 100),
+    }
+
 
 GAP_TERMS = {
     "lending": "Highlight any lending or credit lifecycle exposure.",
@@ -1257,7 +1390,7 @@ def parse_posted_within_window(posted_text: str, posted_date: str, window_hours:
     return False
 
 
-def score_fit(text: str, company: str) -> Tuple[int, List[str], List[str]]:
+def score_fit(text: str, company: str) -> Tuple[int, List[str], List[str], dict]:
     text_l = text.lower()
     matched_domain = [t for t in DOMAIN_TERMS if t in text_l]
     matched_extra = [t for t in EXTRA_TERMS if t in text_l]
@@ -1297,7 +1430,12 @@ def score_fit(text: str, company: str) -> Tuple[int, List[str], List[str]]:
     if "api" in text_l:
         score += 3
 
-    return min(score, 90), matched_domain, matched_extra
+    # ATS keyword matching against candidate CV
+    ats = ats_keyword_match(text, JOB_DIGEST_PROFILE_TEXT)
+    ats_bonus = min(10, round(ats["ats_keyword_coverage"] / 10))
+    score += ats_bonus
+
+    return min(score, 95), matched_domain, matched_extra, ats
 
 
 def build_reasons(text: str) -> str:
@@ -1496,6 +1634,8 @@ def enhance_records_with_gemini(records: List[JobRecord]) -> List[JobRecord]:
             f"Location: {record.location}\n"
             f"Posted: {record.posted}\n"
             f"Summary: {record.notes}\n"
+            f"ATS keyword coverage: {record.ats_keyword_coverage}% ({len(record.ats_keywords_found)} matched, {len(record.ats_keywords_missing)} missing)\n"
+            f"Missing keywords: {', '.join(record.ats_keywords_missing[:10])}\n"
         )
         text = generate_gemini_text(prompt)
         data = parse_gemini_payload(text or "")
@@ -1595,19 +1735,64 @@ def enhance_records_with_openai_cv(records: List[JobRecord]) -> List[JobRecord]:
 
     for record in records[:limit]:
         prompt = (
-            "You are a senior CV writer specialising in UK fintech and financial services product roles. "
-            "Given the candidate's real CV text and a target job description, produce tailored CV section "
-            "replacements that will pass ATS screening and impress a hiring manager.\n\n"
+            "You are a senior CV writer for UK fintech and financial services product roles. "
+            "Given the candidate's real CV and a target JD, produce tailored CV sections that "
+            "sound unmistakably human, pass ATS screening at 95%+ keyword coverage, and avoid "
+            "raising credibility eyebrows.\n\n"
             "Return JSON ONLY with a single key 'tailored_cv_sections' containing:\n"
-            "- summary: 2-3 sentence professional summary tailored to this specific role\n"
-            "- key_achievements: array of 5-7 bullet strings reordered/rewritten from the candidate's "
-            "real achievements to emphasise relevance to this JD (start each with '- ')\n"
-            "- vistra_bullets: array of 8-10 bullet strings for the Vistra Corporate Services role "
-            "tailored to this JD (start each with '- ')\n"
-            "- ebury_bullets: array of 4-5 bullet strings for the Ebury Partners role "
-            "tailored to this JD (start each with '- ')\n\n"
-            "Rules: plain text only, no tables, no icons. Bullets must be action-led with metrics. "
-            "Keep the candidate's real experience — rewrite emphasis and ordering, don't fabricate.\n\n"
+            "- summary: 3-4 sentences (domain anchor + credentials + \"how you work\" line)\n"
+            "- key_achievements: array of 6-7 bullets (each metric appears HERE only, not repeated in role bullets)\n"
+            "- vistra_bullets: array of exactly 9 flat bullets (NO sub-headings, NO sub-sections)\n"
+            "- ebury_bullets: array of 4 bullets (qualitative if metrics already in key_achievements)\n\n"
+            "═══ HUMAN-READABILITY RULES (mandatory) ═══\n"
+            "1. DOMAIN ANCHOR: First sentence of summary names the specific domain for THIS role "
+            "(e.g., \"Identity, KYC and fraud product manager specialising in screening platforms, "
+            "authentication workflows and onboarding verification\"). Never open with generic "
+            "\"Product Manager with 13+ years...\"\n"
+            "2. NO TEMPLATE PHRASES: Never use \"proven track record\", \"strong analytical\", "
+            "\"complex cross-functional problems\", \"data-driven methodologies\", \"results-oriented\", "
+            "\"results-driven\", \"strong understanding\", \"strong commercial acumen\". Use concrete "
+            "verbs: built, redesigned, diagnosed, negotiated, shipped, wrote, ran, stood up, scoped.\n"
+            "3. DE-DUPLICATE METRICS: Each percentage/number appears ONCE in the entire output. "
+            "If 55% is in key_achievements, vistra_bullets must refer qualitatively "
+            "(\"eliminated the primary bottleneck in cycle time\"). Never repeat the same metric.\n"
+            "4. ACTION + OUTCOME BULLETS: At least half must follow \"Did X; achieved Y\". "
+            "E.g., \"Diagnosed bottlenecks across onboarding, QA and servicing workflows; "
+            "redesigned process flows to reduce journey friction\"\n"
+            "5. VARY LANGUAGE: Use \"customer experience\" once, then rotate: \"journey friction\", "
+            "\"drop-offs\", \"service levels\", \"cycle time\", \"throughput\". Never repeat a phrase "
+            "across bullets.\n"
+            "6. \"HOW YOU WORK\" LINE: Include exactly one sentence in summary describing working "
+            "style that is hard to fake. E.g., \"Run weekly deep-dive sessions with ops leads; "
+            "publish SteerCo-ready packs with owners, dates and dependency tracking.\"\n\n"
+            "═══ ATS RULES (target 95%+) ═══\n"
+            "- Mirror the JD's exact nouns: once in summary + once in skills/technical + naturally "
+            "in experience. Not everywhere.\n"
+            "- Prefer evidence-led keywords (\"built X dashboard\", \"reduced Y false positives\") "
+            "over generic descriptors (\"data-driven, strategic\")\n"
+            "- Use standard section headings the ATS can parse: PROFESSIONAL SUMMARY, KEY ACHIEVEMENTS, "
+            "PROFESSIONAL EXPERIENCE, TECHNICAL & PRODUCT CAPABILITIES, EDUCATION & CERTIFICATIONS\n"
+            "- Keep tool/platform lists relevant to THIS role; long stacks look padded\n\n"
+            "═══ CREDIBILITY RULES ═══\n"
+            "- No repeated metrics across sections. Each big number once (in achievements OR role "
+            "bullets), then qualitative.\n"
+            "- Audit-friendly numbers: include scope + baseline + method briefly. Over-precise or "
+            "\"perfect\" claims feel manufactured.\n"
+            "- Tool lists: prioritise what the role asks for. Don't list every tool you've touched.\n\n"
+            "═══ AI RESEMBLANCE RULES ═══\n"
+            "- Cut all template phrases unless immediately followed by a concrete example\n"
+            "- Vary sentence structure: mix short blunt lines (\"Stood up EDD squad\") with one "
+            "occasional longer line\n"
+            "- The \"how you work\" line is the single strongest anti-AI signal. Make it specific "
+            "and operational.\n\n"
+            "═══ FORMATTING ═══\n"
+            "- British English ONLY (optimised, organised, colour, centre, programme)\n"
+            "- NO full stops at the end of bullets\n"
+            "- NO em dashes; use commas, semicolons or \"to\"\n"
+            "- Keep real metrics (55%, 20%, 38%, \u00a3400k, 50k+, 470 PEP, \u00a3120k ARR): never water down\n"
+            "- Do NOT fabricate experience. Only rephrase, reorder and re-emphasise\n"
+            "- Fit within 2 A4 pages\n"
+            "- One consistent bullet style throughout (no mixed symbols)\n\n"
             f"Candidate CV:\n{JOB_DIGEST_PROFILE_TEXT}\n\n"
             "Target job:\n"
             f"Title: {record.role}\n"
@@ -1620,7 +1805,7 @@ def enhance_records_with_openai_cv(records: List[JobRecord]) -> List[JobRecord]:
                 model=OPENAI_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.4,
-                max_tokens=2000,
+                max_tokens=4000,
             )
             text = response.choices[0].message.content or ""
             data = parse_gemini_payload(text)  # reuse JSON extractor
@@ -1688,6 +1873,9 @@ def write_records_to_firestore(records: List[JobRecord]) -> None:
             "prep_questions": record.prep_questions,
             "apply_tips": record.apply_tips,
             "updated_at": datetime.now(timezone.utc).isoformat(),
+            "ats_keywords_found": record.ats_keywords_found,
+            "ats_keywords_missing": record.ats_keywords_missing,
+            "ats_keyword_coverage": record.ats_keyword_coverage,
         }
         optional_fields = {
             "role_summary": record.role_summary,
@@ -3856,7 +4044,7 @@ def main() -> None:
 
         summary = desc_text[:500]
         full_text = f"{title} {company} {summary}"
-        score, _, _ = score_fit(full_text, company)
+        score, _, _, ats = score_fit(full_text, company)
 
         if score < MIN_SCORE:
             continue
@@ -3878,6 +4066,9 @@ def main() -> None:
                 why_fit=why_fit,
                 cv_gap=cv_gap,
                 notes=summary,
+                ats_keywords_found=ats["ats_keywords_found"],
+                ats_keywords_missing=ats["ats_keywords_missing"],
+                ats_keyword_coverage=ats["ats_keyword_coverage"],
             )
         )
 
@@ -3898,7 +4089,7 @@ def main() -> None:
 
         summary = job.get("summary", "")
         full_text = f"{title} {company} {summary}"
-        score, _, _ = score_fit(full_text, company)
+        score, _, _, ats = score_fit(full_text, company)
         if score < MIN_SCORE:
             continue
 
@@ -3919,6 +4110,9 @@ def main() -> None:
                 why_fit=why_fit,
                 cv_gap=cv_gap,
                 notes=summary,
+                ats_keywords_found=ats["ats_keywords_found"],
+                ats_keywords_missing=ats["ats_keywords_missing"],
+                ats_keyword_coverage=ats["ats_keyword_coverage"],
             )
         )
 
@@ -3939,7 +4133,7 @@ def main() -> None:
 
         summary = job.get("summary", "")
         full_text = f"{title} {company} {summary}"
-        score, _, _ = score_fit(full_text, company)
+        score, _, _, ats = score_fit(full_text, company)
         if score < MIN_SCORE:
             continue
 
@@ -3960,6 +4154,9 @@ def main() -> None:
                 why_fit=why_fit,
                 cv_gap=cv_gap,
                 notes=summary,
+                ats_keywords_found=ats["ats_keywords_found"],
+                ats_keywords_missing=ats["ats_keywords_missing"],
+                ats_keyword_coverage=ats["ats_keyword_coverage"],
             )
         )
 
@@ -3980,7 +4177,7 @@ def main() -> None:
 
         summary = job.get("summary", "")
         full_text = f"{title} {company} {summary}"
-        score, _, _ = score_fit(full_text, company)
+        score, _, _, ats = score_fit(full_text, company)
         if score < MIN_SCORE:
             continue
 
@@ -4001,6 +4198,9 @@ def main() -> None:
                 why_fit=why_fit,
                 cv_gap=cv_gap,
                 notes=summary,
+                ats_keywords_found=ats["ats_keywords_found"],
+                ats_keywords_missing=ats["ats_keywords_missing"],
+                ats_keyword_coverage=ats["ats_keyword_coverage"],
             )
         )
 
@@ -4021,7 +4221,7 @@ def main() -> None:
 
         summary = job.get("summary", "")
         full_text = f"{title} {company} {summary}"
-        score, _, _ = score_fit(full_text, company)
+        score, _, _, ats = score_fit(full_text, company)
         if score < MIN_SCORE:
             continue
 
@@ -4042,6 +4242,9 @@ def main() -> None:
                 why_fit=why_fit,
                 cv_gap=cv_gap,
                 notes=summary,
+                ats_keywords_found=ats["ats_keywords_found"],
+                ats_keywords_missing=ats["ats_keywords_missing"],
+                ats_keyword_coverage=ats["ats_keyword_coverage"],
             )
         )
 
@@ -4062,7 +4265,7 @@ def main() -> None:
             continue
 
         full_text = f"{title} {company} {summary}"
-        score, _, _ = score_fit(full_text, company)
+        score, _, _, ats = score_fit(full_text, company)
         if score < MIN_SCORE:
             continue
 
@@ -4083,6 +4286,9 @@ def main() -> None:
                 why_fit=why_fit,
                 cv_gap=cv_gap,
                 notes=summary,
+                ats_keywords_found=ats["ats_keywords_found"],
+                ats_keywords_missing=ats["ats_keywords_missing"],
+                ats_keyword_coverage=ats["ats_keyword_coverage"],
             )
         )
 
@@ -4148,6 +4354,9 @@ def main() -> None:
             "Prep_Answer_Sets": " || ".join(" / ".join(ans) for ans in r.prep_answer_sets),
             "Scorecard": " | ".join(r.scorecard),
             "Apply_Tips": r.apply_tips,
+            "ATS_Coverage_%": r.ats_keyword_coverage,
+            "ATS_Keywords_Found": " | ".join(r.ats_keywords_found),
+            "ATS_Keywords_Missing": " | ".join(r.ats_keywords_missing),
             "Notes": r.notes,
         }
         for r in records
