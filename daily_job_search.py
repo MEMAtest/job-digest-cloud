@@ -4313,7 +4313,7 @@ def main() -> None:
     records = sorted(records, key=lambda record: record.fit_score, reverse=True)
 
     # Optional OpenAI tailored CV generation
-    records = enhance_records_with_openai_cv(records)
+    # records = enhance_records_with_openai_cv(records)  # Disabled: now on-demand via portal
 
     # Optional Firebase persistence
     write_records_to_firestore(records)
